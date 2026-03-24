@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oodkit"
+version = "0.1.0"
+description = "Out-of-distribution detection library for computer vision"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["oodkit*"]
