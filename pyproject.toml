@@ -1,16 +1,33 @@
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "oodkit"
 version = "0.1.0"
-description = "Out-of-distribution detection library for computer vision"
-readme = "README.md"
-requires-python = ">=3.9"
-license = { text = "MIT" }
-authors = []
+description = "OOD detection toolkit"
+authors = [{name="Joseph Egan"}]
+dependencies = [
+    "numpy"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ipython",
+    "jupyterlab",
+]
+
+ml = [
+    "torch",
+    "torchvision",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["oodkit*"]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
