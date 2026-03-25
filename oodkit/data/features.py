@@ -3,6 +3,9 @@ Features: unified container for logits and embeddings.
 
 Can hold logits only, embeddings only, or both.
 Detectors choose what they need (e.g., MSP → logits, KNN → embeddings, ViM → both).
+
+Note: `Features` is a model-output container name and is not synonymous with
+"embeddings only" in this library.
 """
 
 from typing import Optional
@@ -20,7 +23,9 @@ class Features:
         Class logits, shape (n_samples, n_classes).
     embeddings : ArrayLike, optional
         Feature embeddings, shape (n_samples, n_features).
-        At least one of logits or embeddings must be provided.
+    Notes
+    -----
+    At least one of logits or embeddings must be provided.
     """
 
     def __init__(

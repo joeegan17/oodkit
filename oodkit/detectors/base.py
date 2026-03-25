@@ -21,6 +21,14 @@ class BaseDetector(ABC):
     - fit: learn from in-distribution data
     - score: return per-sample OOD scores (higher = more OOD)
     - predict: binary ID/OOD labels from scores
+
+    Notes
+    -----
+    Input type policy for MVP:
+    - Public detector methods may accept broad array-like inputs through `Features`
+      (including NumPy arrays and torch tensors).
+    - Implementations are free to normalize these inputs to NumPy once at method
+      boundaries and return NumPy outputs.
     """
 
     @abstractmethod
