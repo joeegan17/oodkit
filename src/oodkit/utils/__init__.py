@@ -2,5 +2,6 @@
 Utility functions for OODKit.
 """
 
-# Re-export linalg helpers when implemented
-# from oodkit.utils.linalg import ...
+from oodkit.utils.array import to_numpy
+
+__all__ = ["to_numpy"]

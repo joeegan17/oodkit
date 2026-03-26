@@ -10,6 +10,7 @@ import numpy as np
 
 from oodkit.detectors.base import BaseDetector
 from oodkit.types import ArrayLike
+from oodkit.utils.array import to_numpy
 
 if TYPE_CHECKING:
     from oodkit.data.features import Features
@@ -37,8 +38,8 @@ class ViM(BaseDetector):
         D : int
             Number of principal directions to discard.
         """
-        self.W = self._to_numpy(W)
-        self.b = self._to_numpy(b)
+        self.W = to_numpy(W)
+        self.b = to_numpy(b)
         self.D = D
         # ViM origin depends only on W and b, so compute once at construction time.
         self.origin = self.compute_origin(self.W, self.b)
@@ -66,8 +67,8 @@ class ViM(BaseDetector):
             The fitted detector instance.
         """
         # Convert once at boundary; internals operate on NumPy arrays.
-        embeddings = self._to_numpy(features_train.embeddings)
-        logits = self._to_numpy(features_train.logits)
+        embeddings = to_numpy(features_train.embeddings)
+        logits = to_numpy(features_train.logits)
 
         X_centered = self.center_features(embeddings, self.origin)
         self.R = self.get_residual_projector(X_centered, self.D)
@@ -98,8 +99,8 @@ class ViM(BaseDetector):
         self._check_is_fitted()
 
         # Convert once at boundary; internals operate on NumPy arrays.
-        embeddings = self._to_numpy(features_test.embeddings)
-        logits = self._to_numpy(features_test.logits)
+        embeddings = to_numpy(features_test.embeddings)
+        logits = to_numpy(features_test.logits)
 
         X_centered = self.center_features(embeddings, self.origin)
         residual_norms = self.compute_residual_norms(X_centered, self.R)
@@ -113,6 +114,7 @@ class ViM(BaseDetector):
     ) -> ArrayLike:
         """
         Predict binary ID (0) / OOD (1) labels from ViM scores.
+        In practice, this may require calibration depending on the dataset.
 
         Parameters
         ----------
@@ -201,8 +203,8 @@ class ViM(BaseDetector):
     @staticmethod
     def get_residual_projector(X_centered: ArrayLike, D: int) -> ArrayLike:
         """
-        Get basis vectors for the residual subspace (orthogonal complement
-        of the top-D principal subspace).
+       Get basis vectors for the residual subspace after discarding the
+       top-D principal directions.
 
         Parameters
         ----------
@@ -334,18 +336,3 @@ class ViM(BaseDetector):
         softmax = exps / np.sum(exps, axis=1, keepdims=True)
 
         return softmax[:, -1]
-
-    @staticmethod
-    def _to_numpy(x: ArrayLike) -> np.ndarray:
-        """
-        Convert supported inputs to NumPy arrays.
-
-        Accepts NumPy arrays directly and torch tensors via `detach().cpu().numpy()`.
-        """
-        if x is None:
-            raise ValueError("Expected array-like input, got None")
-        if isinstance(x, np.ndarray):
-            return x
-        if hasattr(x, "detach") and hasattr(x, "cpu") and hasattr(x, "numpy"):
-            return x.detach().cpu().numpy()
-        return np.asarray(x)
