@@ -11,7 +11,7 @@ pip install -e .
 ## Usage
 
 ```python
-from oodkit.detectors import ViM, MSP, Energy, BaseDetector
+from oodkit.detectors import ViM, MSP, Energy, Mahalanobis, KNN, BaseDetector
 from oodkit.data import Features
 
 # Create features (logits, embeddings, or both)
@@ -26,6 +26,20 @@ scores = detector.score(features)
 msp = MSP(temperature=1.0)
 msp.fit(features)
 scores_msp = msp.score(features)
+
+# Mahalanobis: embeddings + optional class labels at fit time
+maha = Mahalanobis(eps=1e-6)
+maha.fit(Features(embeddings=...), y=...)  # y defaults to single Gaussian if omitted
+scores_maha = maha.score(Features(embeddings=...))
+
+# KNN: embeddings only, score = avg distance to k nearest ID embeddings
+knn = KNN(k=10, backend="auto", metric="cosine")  # metric passed through when sklearn backend is used
+knn.fit(Features(embeddings=...))
+scores_knn = knn.score(Features(embeddings=...))
+
+# Distance-based detectors require an explicit calibrated threshold for predict()
+labels_maha = maha.predict(Features(embeddings=...), threshold=...)
+labels_knn = knn.predict(Features(embeddings=...), threshold=...)
 ```
 
 ## Testing
@@ -48,6 +62,6 @@ Tests mirror `src/oodkit/` under `tests/pkg/` (e.g. `tests/pkg/detectors/test_ms
 
 ## Package structure
 
-- `oodkit/detectors/` — OOD detectors (ViM, MSP, Energy, …) with sklearn-style fit/score/predict
+- `oodkit/detectors/` — OOD detectors (ViM, MSP, Energy, Mahalanobis, KNN, …) with sklearn-style fit/score/predict
 - `oodkit/data/` — Features container for logits and embeddings
 - `oodkit/utils/` — Linear algebra and other helpers

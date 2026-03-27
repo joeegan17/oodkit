@@ -153,3 +153,37 @@ def logits_alpha_vim_score() -> np.ndarray:
 @pytest.fixture
 def residual_norms_alpha_vim() -> np.ndarray:
     return np.array([0.5, 0.5], dtype=np.float64)
+
+
+@pytest.fixture
+def embeddings_two_cluster_train() -> np.ndarray:
+    """Two compact 2D clusters for metric detector fitting."""
+    return np.array(
+        [
+            [-1.0, -1.0],
+            [-1.1, -0.9],
+            [-0.9, -1.1],
+            [1.0, 1.0],
+            [1.1, 0.9],
+            [0.9, 1.1],
+        ],
+        dtype=np.float64,
+    )
+
+
+@pytest.fixture
+def labels_two_cluster_train() -> np.ndarray:
+    """Class labels aligned with ``embeddings_two_cluster_train``."""
+    return np.array([0, 0, 0, 1, 1, 1], dtype=np.int64)
+
+
+@pytest.fixture
+def embeddings_near_far_queries() -> np.ndarray:
+    """Query points: first near ID manifold, second intentionally far OOD."""
+    return np.array(
+        [
+            [1.05, 0.95],
+            [4.0, 4.0],
+        ],
+        dtype=np.float64,
+    )
