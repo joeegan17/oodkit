@@ -1,7 +1,8 @@
 """
 Abstract base class for OOD detectors.
 
-All detectors inherit from BaseDetector and implement fit, score, and predict.
+All detectors inherit from ``BaseDetector`` and implement ``fit``, ``score``, and
+``predict``.
 """
 
 from abc import ABC, abstractmethod
@@ -14,79 +15,57 @@ if TYPE_CHECKING:
 
 
 class BaseDetector(ABC):
-    """
-    Abstract base class for out-of-distribution detectors.
+    """Abstract base for out-of-distribution detectors.
 
-    Provides sklearn-style interface:
-    - fit: learn from in-distribution data
-    - score: return per-sample OOD scores (higher = more OOD)
-    - predict: binary ID/OOD labels from scores
+    Sklearn-style API: ``fit`` learns from in-distribution data, ``score`` returns
+    per-sample OOD scores (higher = more OOD), ``predict`` maps scores to binary
+    ID/OOD labels.
 
-    Notes
-    -----
-    Input type policy for MVP:
-    - Public detector methods may accept broad array-like inputs through `Features`
-      (including NumPy arrays and torch tensors).
-    - Implementations are free to normalize these inputs to NumPy once at method
-      boundaries and return NumPy outputs.
+    Note:
+        Public methods may accept array-likes (including torch tensors) via
+        ``Features``; implementations typically convert to NumPy once at method
+        boundaries and return NumPy outputs.
     """
 
     @abstractmethod
     def fit(self, features: "Features", **kwargs) -> "BaseDetector":
-        """
-        Fit the detector on in-distribution features.
+        """Fit the detector on in-distribution features.
 
-        Parameters
-        ----------
-        features : Features
-            Container with logits, embeddings, or both (depends on detector).
-        **kwargs
-            Detector-specific options.
+        Args:
+            features: Container with logits, embeddings, or both (detector-specific).
+            **kwargs: Detector-specific options.
 
-        Returns
-        -------
-        self : BaseDetector
+        Returns:
+            ``self`` for chaining.
         """
         ...
 
     @abstractmethod
     def score(self, features: "Features", **kwargs) -> ArrayLike:
-        """
-        Compute per-sample OOD scores.
+        """Compute per-sample OOD scores (higher = more OOD).
 
-        Higher scores indicate more out-of-distribution.
+        Args:
+            features: Container with logits, embeddings, or both.
+            **kwargs: Detector-specific options.
 
-        Parameters
-        ----------
-        features : Features
-            Container with logits, embeddings, or both.
-        **kwargs
-            Detector-specific options.
-
-        Returns
-        -------
-        scores : ArrayLike
-            Shape (n_samples,).
+        Returns:
+            Per-sample scores, shape ``(n_samples,)``.
         """
         ...
 
     def predict(self, features: "Features", threshold: Optional[float] = None, **kwargs) -> ArrayLike:
-        """
-        Predict binary ID (0) / OOD (1) labels from scores.
+        """Predict binary ID (0) / OOD (1) from scores.
 
-        Parameters
-        ----------
-        features : Features
-            Container with logits, embeddings, or both.
-        threshold : float, optional
-            Score threshold; samples above are OOD. Detector-specific default if None.
-        **kwargs
-            Passed to score().
+        Args:
+            features: Container passed through to ``score()``.
+            threshold: Score cutoff; samples above are OOD. Subclasses may define
+                a default when ``None``.
+            **kwargs: Forwarded to ``score()``.
 
-        Returns
-        -------
-        labels : ArrayLike
-            Shape (n_samples,), 0 = ID, 1 = OOD.
+        Returns:
+            Integer labels, shape ``(n_samples,)`` with values in ``{0, 1}``.
+
+        Raises:
+            NotImplementedError: If the subclass does not implement ``predict``.
         """
-        # Subclasses override to provide detector-specific default threshold
         raise NotImplementedError("predict to be implemented by subclass")

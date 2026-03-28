@@ -1,14 +1,5 @@
 """
-Class-conditional Mahalanobis OOD detector.
-
-Uses embeddings only. Fit computes per-class means and a shared covariance
-inverse; score is the minimum squared Mahalanobis distance to any class mean.
-
-Note
-----
-These distance-based methods often perform better when embeddings come from
-contrastive objectives (or similarly metric-aware training), because in-class
-clusters tend to be tighter and between-class separation improves.
+Class-conditional Mahalanobis OOD detector on embeddings.
 """
 
 from typing import TYPE_CHECKING, Optional
@@ -24,22 +15,29 @@ if TYPE_CHECKING:
 
 
 class Mahalanobis(BaseDetector):
-    """
-    Class-conditional Mahalanobis detector with shared covariance.
+    """Minimum squared Mahalanobis distance to class means with shared covariance.
 
-    Expected inputs
-    ---------------
-    - `features.embeddings`, shape `(n_samples, n_features)`
+    Fit estimates per-class means and one pooled covariance (class-centered),
+    regularized on the diagonal. Score is the minimum squared distance across
+    classes (higher = more OOD).
 
-    Training labels
-    ---------------
-    - `y`, shape `(n_samples,)`, optional.
-    - If `y` is `None`, fit falls back to a single Gaussian and prints a warning.
-      This mode is supported for convenience, but class-conditional fitting is
-      the intended use.
+    ``fit`` uses ``features.embeddings``; optional ``y`` gives class labels.
+    If ``y`` is omitted, a warning is printed and a single Gaussian is fit.
+
+    Note:
+        Distance-based scores often work better with metric-aware embeddings
+        (e.g. contrastive training).
     """
 
     def __init__(self, eps: float = 1e-6) -> None:
+        """Initialize with covariance regularization.
+
+        Args:
+            eps: Ridge added to the covariance diagonal for inversion stability.
+
+        Raises:
+            ValueError: If ``eps <= 0``.
+        """
         if eps <= 0:
             raise ValueError("eps must be positive")
         self.eps = float(eps)
@@ -50,6 +48,21 @@ class Mahalanobis(BaseDetector):
         y: Optional[ArrayLike] = None,
         **kwargs: object,
     ) -> "Mahalanobis":
+        """Fit class means and shared inverse covariance on ID embeddings.
+
+        Args:
+            features_train: Must provide ``embeddings``, shape ``(n_samples, n_features)``.
+            y: Training labels, shape ``(n_samples,)``. If ``None``, all samples
+                are treated as one class (not recommended).
+            **kwargs: Unused.
+
+        Returns:
+            ``self``.
+
+        Raises:
+            ValueError: If embeddings are missing, wrong shape, too few samples,
+                or ``y`` length mismatches.
+        """
         if features_train.embeddings is None:
             raise ValueError("Mahalanobis.fit requires Features.embeddings")
         embeddings = to_numpy(features_train.embeddings)
@@ -94,6 +107,19 @@ class Mahalanobis(BaseDetector):
         return self
 
     def score(self, features_test: "Features", **kwargs: object) -> ArrayLike:
+        """Minimum squared Mahalanobis distance to any class mean.
+
+        Args:
+            features_test: ``embeddings`` with feature dim matching ``fit``.
+            **kwargs: Unused.
+
+        Returns:
+            Distances, shape ``(n_samples,)``.
+
+        Raises:
+            RuntimeError: If not fitted.
+            ValueError: If embeddings are missing or wrong shape.
+        """
         self._check_is_fitted()
 
         if features_test.embeddings is None:
@@ -118,10 +144,21 @@ class Mahalanobis(BaseDetector):
         threshold: float,
         **kwargs: object,
     ) -> ArrayLike:
+        """Predict OOD (1) when ``score > threshold``.
+
+        Args:
+            features: Embeddings for ``score()``.
+            threshold: Validation-tuned cutoff.
+            **kwargs: Forwarded to ``score()``.
+
+        Returns:
+            Labels ``{0, 1}``, shape ``(n_samples,)``.
+        """
         scores = self.score(features, **kwargs)
         return (scores > threshold).astype(int)
 
     def _check_is_fitted(self) -> None:
+        """Raise if ``fit`` has not set model attributes."""
         missing = [
             name
             for name in ("classes_", "class_means_", "inverse_covariance_", "n_features_in_")

@@ -101,19 +101,19 @@ def vim_linear_pack(rng: np.random.Generator) -> SimpleNamespace:
     """
     Consistent ViM toy problem: ``logits ≈ embeddings @ W.T + b``.
 
-    Attributes: ``W``, ``b``, ``D``, ``embeddings``, ``logits``,
+    Attributes: ``W``, ``b``, ``n_components``, ``embeddings``, ``logits``,
     ``n_classes``, ``n_features``, ``n_samples``.
     """
     n_classes, n_features, n_samples = 2, 3, 5
     W = rng.standard_normal((n_classes, n_features))
     b = np.array([0.1, -0.1], dtype=np.float64)
-    D = 1
+    n_components = 1
     embeddings = rng.standard_normal((n_samples, n_features))
     logits = embeddings @ W.T + b
     return SimpleNamespace(
         W=W,
         b=b,
-        D=D,
+        n_components=n_components,
         embeddings=embeddings,
         logits=logits,
         n_classes=n_classes,

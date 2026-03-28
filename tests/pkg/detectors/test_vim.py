@@ -35,13 +35,13 @@ def test_vim_center_features_bad_shapes():
         ViM.center_features(np.zeros((2, 4)), np.zeros(3))
 
 
-def test_vim_get_residual_projector_D_bounds(residual_Xc_bad_D):
-    with pytest.raises(ValueError, match="D must"):
-        ViM.get_residual_projector(residual_Xc_bad_D, D=10)
+def test_vim_get_residual_projector_k_bounds(residual_Xc_bad_D):
+    with pytest.raises(ValueError, match="k must"):
+        ViM.get_residual_projector(residual_Xc_bad_D, k=10)
 
 
 def test_vim_score_before_fit_raises(vim_linear_pack):
-    vim = ViM(vim_linear_pack.W, vim_linear_pack.b, vim_linear_pack.D)
+    vim = ViM(vim_linear_pack.W, vim_linear_pack.b, n_components=vim_linear_pack.n_components)
     f = Features(
         logits=vim_linear_pack.logits[:2],
         embeddings=vim_linear_pack.embeddings[:2],
@@ -52,7 +52,7 @@ def test_vim_score_before_fit_raises(vim_linear_pack):
 
 def test_vim_fit_score_predict_end_to_end(vim_linear_pack):
     p = vim_linear_pack
-    vim = ViM(p.W, p.b, p.D)
+    vim = ViM(p.W, p.b, n_components=p.n_components)
     train = Features(logits=p.logits, embeddings=p.embeddings)
     assert vim.fit(train) is vim
     test = Features(logits=p.logits[:2], embeddings=p.embeddings[:2])
@@ -78,10 +78,19 @@ def test_vim_compute_alpha_and_vim_score(
     assert np.all((s >= 0) & (s <= 1))
 
 
+def test_vim_fit_default_pct_variance(vim_linear_pack):
+    p = vim_linear_pack
+    vim = ViM(p.W, p.b)
+    train = Features(logits=p.logits, embeddings=p.embeddings)
+    vim.fit(train)
+    assert hasattr(vim, "n_components_fitted_")
+    assert 1 <= vim.n_components_fitted_ < p.n_features
+
+
 def test_vim_torch_W_b_and_features(vim_linear_pack):
     torch = pytest.importorskip("torch")
     p = vim_linear_pack
-    vim = ViM(torch.tensor(p.W), torch.tensor(p.b), p.D)
+    vim = ViM(torch.tensor(p.W), torch.tensor(p.b), n_components=p.n_components)
     train = Features(
         logits=torch.tensor(p.logits),
         embeddings=torch.tensor(p.embeddings),

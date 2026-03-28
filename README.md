@@ -11,16 +11,22 @@ pip install -e .
 ## Usage
 
 ```python
-from oodkit.detectors import ViM, MSP, Energy, Mahalanobis, KNN, BaseDetector
+from oodkit.detectors import ViM, MSP, Energy, Mahalanobis, KNN, PCAFusion, BaseDetector
 from oodkit.data import Features
 
 # Create features (logits, embeddings, or both)
 features = Features(logits=..., embeddings=...)
 
-# ViM: fit on ID data, then score
-detector = ViM(W, b, D)
+# ViM: fit on ID data (principal subspace: n_components or pct_variance), then score
+detector = ViM(W, b, n_components=1)  # or ViM(W, b) for default pct_variance=0.95
 detector.fit(features)
 scores = detector.score(features)
+
+# PCAFusion (Guan et al. ICCV 2023): PCA reconstruction × log-sum-exp; score negated so higher = more OOD
+pca_f = PCAFusion(n_components=1)  # or PCAFusion() for default pct_variance=0.95
+pca_f.fit(Features(embeddings=...))
+scores_pca = pca_f.score(Features(embeddings=..., logits=...))
+labels_pca = pca_f.predict(Features(embeddings=..., logits=...), threshold=...)  # calibrate threshold on validation
 
 # MSP / Energy: logits only; fit() is a no-op; optional temperature
 msp = MSP(temperature=1.0)
@@ -62,6 +68,6 @@ Tests mirror `src/oodkit/` under `tests/pkg/` (e.g. `tests/pkg/detectors/test_ms
 
 ## Package structure
 
-- `oodkit/detectors/` — OOD detectors (ViM, MSP, Energy, Mahalanobis, KNN, …) with sklearn-style fit/score/predict
+- `oodkit/detectors/` — OOD detectors (ViM, MSP, Energy, Mahalanobis, KNN, PCAFusion, …) with sklearn-style fit/score/predict
 - `oodkit/data/` — Features container for logits and embeddings
 - `oodkit/utils/` — Linear algebra and other helpers

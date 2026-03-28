@@ -1,10 +1,10 @@
 """
 ViM (Virtual Logit Matching) OOD detector.
 
-Uses both logits and embeddings from Features.
+Paper: https://arxiv.org/pdf/2203.10807
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
@@ -16,32 +16,65 @@ if TYPE_CHECKING:
     from oodkit.data.features import Features
 
 
+def _select_principal_subspace_dim(
+    evals_desc: np.ndarray,
+    n_features: int,
+    n_components: Optional[int],
+    pct_variance: float,
+) -> int:
+    """Number of leading eigen-directions to discard (explicit count or variance rule)."""
+    if n_components is not None:
+        k = int(n_components)
+        if k < 0 or k >= n_features:
+            raise ValueError(
+                f"n_components must satisfy 0 <= n_components < {n_features}, got {k}"
+            )
+        return k
+    if not (0.0 < pct_variance <= 1.0):
+        raise ValueError("pct_variance must be in (0, 1]")
+    total = float(np.sum(evals_desc))
+    if total <= 0:
+        return 1
+    cum_ratio = np.cumsum(evals_desc) / total
+    k = int(np.searchsorted(cum_ratio, pct_variance, side="left")) + 1
+    return int(max(1, min(k, n_features - 1)))
+
+
 class ViM(BaseDetector):
+    """Virtual logit matching using residual norm in the PCA complement.
+
+    Principal subspace is defined from the covariance of **origin-centered** ID
+    embeddings (same eigen ordering convention as ``PCAFusion``); ``n_components``
+    is how many leading directions are **discarded** before residual norms are taken.
+
+    Requires ``features.embeddings`` and ``features.logits`` for ``fit`` and ``score``.
     """
-    ViM detector.
 
-    Expected inputs
-    ----------------
-    - `features.logits` for classification logits, shape `(n_samples, n_classes)`
-    - `features.embeddings` for feature embeddings, shape `(n_samples, n_features)`
+    def __init__(
+        self,
+        W: ArrayLike,
+        b: ArrayLike,
+        n_components: Optional[int] = None,
+        pct_variance: float = 0.95,
+    ) -> None:
+        """Build detector head and subspace hyperparameters.
 
-    """
+        Args:
+            W: Classifier weights, shape ``(n_classes, n_features)``.
+            b: Bias, shape ``(n_classes,)``.
+            n_components: If set, discard this many leading principal directions.
+                Overrides ``pct_variance``.
+            pct_variance: If ``n_components`` is ``None``, choose smallest ``k`` so the
+                top ``k`` eigenvalues explain at least this fraction of variance on
+                origin-centered training embeddings.
 
-    def __init__(self, W: ArrayLike, b: ArrayLike, D: int) -> None:
-        """
-        Parameters
-        ----------
-        W : ArrayLike
-            Classifier weights used by ViM, shape `(n_classes, n_features)`.
-        b : ArrayLike
-            Classifier bias term from the classifier head, shape `(n_classes,)`.
-        D : int
-            Number of principal directions to discard.
+        Raises:
+            ValueError: If ``W`` or ``b`` shapes are invalid (see ``compute_origin``).
         """
         self.W = to_numpy(W)
         self.b = to_numpy(b)
-        self.D = D
-        # ViM origin depends only on W and b, so compute once at construction time.
+        self.n_components = n_components
+        self.pct_variance = float(pct_variance)
         self.origin = self.compute_origin(self.W, self.b)
 
     def fit(
@@ -49,56 +82,57 @@ class ViM(BaseDetector):
         features_train: "Features",
         **kwargs: object,
     ) -> "ViM":
-        """
-        Fit ViM components from training data.
+        """Fit residual subspace and scaling ``alpha`` on ID data.
 
-        Parameters
-        ----------
-        features_train : Features
-            Container with at least:
-            - `features_train.embeddings`: shape `(n_samples, n_features)`
-            - `features_train.logits`: shape `(n_samples, n_classes)`
-        **kwargs : object
-            Reserved for future detector-specific options.
+        Args:
+            features_train: ``embeddings`` ``(n_samples, n_features)`` and ``logits``
+                ``(n_samples, n_classes)``.
+            **kwargs: Unused.
 
-        Returns
-        -------
-        self : ViM
-            The fitted detector instance.
+        Returns:
+            ``self``.
+
+        Raises:
+            ValueError: If inputs are missing, wrong shape, or feature dim ``< 2``.
         """
-        # Convert once at boundary; internals operate on NumPy arrays.
         embeddings = to_numpy(features_train.embeddings)
         logits = to_numpy(features_train.logits)
 
         X_centered = self.center_features(embeddings, self.origin)
-        self.R = self.get_residual_projector(X_centered, self.D)
+        _, n_features = X_centered.shape
+        if n_features < 2:
+            raise ValueError("ViM.fit requires at least 2 feature dimensions")
+
+        cov = X_centered.T @ X_centered
+        evals, _ = np.linalg.eigh(cov)
+        evals_desc = evals[::-1]
+        k = _select_principal_subspace_dim(
+            evals_desc,
+            n_features,
+            self.n_components,
+            self.pct_variance,
+        )
+        self.n_components_fitted_ = k
+        self.R = self.get_residual_projector(X_centered, k)
         residual_norms = self.compute_residual_norms(X_centered, self.R)
         self.alpha = self.compute_alpha(logits, residual_norms)
         return self
 
     def score(self, features_test: "Features", **kwargs: object) -> ArrayLike:
-        """
-        Compute per-sample ViM OOD scores.
+        """Per-sample virtual-class softmax probability (higher ⇒ more OOD in typical use).
 
-        Parameters
-        ----------
-        features_test : Features
-            Container with:
-            - `features_test.embeddings`: shape `(n_samples, n_features)`
-            - `features_test.logits`: shape `(n_samples, n_classes)`
-            The detector must have been fitted beforehand so that internal
-            parameters (e.g. origin/subspace/scalar) are available.
-        **kwargs : object
-            Detector-specific options (reserved for future use).
+        Args:
+            features_test: ``embeddings`` and ``logits`` after ``fit``.
+            **kwargs: Unused.
 
-        Returns
-        -------
-        scores : ArrayLike
-            Per-sample ViM OOD scores, shape `(n_samples,)`.
+        Returns:
+            Probabilities in ``[0, 1]``, shape ``(n_samples,)``.
+
+        Raises:
+            RuntimeError: If not fitted.
         """
         self._check_is_fitted()
 
-        # Convert once at boundary; internals operate on NumPy arrays.
         embeddings = to_numpy(features_test.embeddings)
         logits = to_numpy(features_test.logits)
 
@@ -112,44 +146,32 @@ class ViM(BaseDetector):
         threshold: float = 0.5,
         **kwargs: object,
     ) -> ArrayLike:
-        """
-        Predict binary ID (0) / OOD (1) labels from ViM scores.
-        In practice, this may require calibration depending on the dataset.
+        """OOD (1) when ``score > threshold`` (scores are virtual-class probabilities).
 
-        Parameters
-        ----------
-        features : Features
-            Container with `features.logits` and `features.embeddings`.
-        threshold : float, default=0.5
-            If `score > threshold` then predict OOD (1), else ID (0).
-        **kwargs : object
-            Passed through to `score()`.
+        Args:
+            features: Embeddings and logits for ``score()``.
+            threshold: Default ``0.5``; tune for your calibration.
+            **kwargs: Forwarded to ``score()``.
 
-        Returns
-        -------
-        labels : ArrayLike
-            Shape `(n_samples,)`, with values in `{0, 1}`.
+        Returns:
+            Labels ``{0, 1}``, shape ``(n_samples,)``.
         """
         scores = self.score(features, **kwargs)
-        # ViM score is computed as a probability in [0, 1] (virtual-class softmax).
         return (scores > threshold).astype(int)
 
     @staticmethod
     def compute_origin(W: ArrayLike, b: ArrayLike) -> ArrayLike:
-        """
-        Compute the ViM origin in feature space.
+        """Minimum-norm point ``o`` with ``W @ o + b = 0`` (logits at origin).
 
-        Parameters
-        ----------
-        W : ArrayLike
-            Classifier weights, shape `(n_classes, n_features)`.
-        b : ArrayLike
-            Classifier bias term, shape `(n_classes,)`.
+        Args:
+            W: Shape ``(n_classes, n_features)``.
+            b: Shape ``(n_classes,)``.
 
-        Returns
-        -------
-        o : ArrayLike
-            Origin vector in feature space, shape `(n_features,)`.
+        Returns:
+            Origin ``o``, shape ``(n_features,)``.
+
+        Raises:
+            ValueError: If shapes are not 2D/1D compatible.
         """
         if W.ndim != 2:
             raise ValueError(f"W must have shape [C, F], got {W.shape}")
@@ -158,26 +180,21 @@ class ViM(BaseDetector):
                 f"b must have shape [C], got {b.shape}, expected ({W.shape[0]},)"
             )
 
-        # With logits l = W x + b and W shape (C, F), choose the minimum-norm
-        # origin o that satisfies W o + b = 0.
         return -np.linalg.pinv(W) @ b
 
     @staticmethod
     def center_features(X: ArrayLike, o: ArrayLike) -> ArrayLike:
-        """
-        Center features by subtracting the ViM origin.
+        """Subtract ViM origin from each row.
 
-        Parameters
-        ----------
-        X : ArrayLike
-            Feature embeddings, shape `(n_samples, n_features)`.
-        o : ArrayLike
-            Origin vector, shape `(n_features,)`.
+        Args:
+            X: Embeddings, shape ``(n_samples, n_features)``.
+            o: Origin, shape ``(n_features,)``.
 
-        Returns
-        -------
-        X_centered : ArrayLike
-            Centered features, shape `(n_samples, n_features)`.
+        Returns:
+            ``X - o``.
+
+        Raises:
+            ValueError: If shapes disagree.
         """
         if X.ndim != 2:
             raise ValueError(f"X must have shape [N, F], got {X.shape}")
@@ -186,70 +203,52 @@ class ViM(BaseDetector):
         return X - o
 
     def _check_is_fitted(self) -> None:
-        """
-        sklearn-like fittedness check.
-
-        Raises
-        ------
-        RuntimeError
-            If `fit()` has not been called yet.
-        """
-        # `origin` is computed at construction time (from W/b); training-dependent
-        # fitted state is `R` and `alpha`.
+        """Require ``R`` and ``alpha`` from ``fit``."""
         missing = [name for name in ("R", "alpha") if not hasattr(self, name)]
         if missing:
             raise RuntimeError(f"ViM instance is not fitted yet. Missing: {missing}")
 
     @staticmethod
-    def get_residual_projector(X_centered: ArrayLike, D: int) -> ArrayLike:
-        """
-       Get basis vectors for the residual subspace after discarding the
-       top-D principal directions.
+    def get_residual_projector(X_centered: ArrayLike, k: int) -> ArrayLike:
+        """Orthonormal basis for the complement of the top-``k`` principal directions.
 
-        Parameters
-        ----------
-        X_centered : ArrayLike
-            Centered training features, shape `(n_samples, n_features)`.
-        D : int
-            Number of top principal directions to discard.
+        Args:
+            X_centered: Origin-centered features, shape ``(n_samples, n_features)``.
+            k: Number of leading eigenvectors of ``X_centered.T @ X_centered`` to remove.
 
-        Returns
-        -------
-        R : ArrayLike
-            Residual subspace basis, shape `(n_features, n_features - D)`.
+        Returns:
+            Matrix ``R`` with shape ``(n_features, n_features - k)``.
+
+        Raises:
+            ValueError: If ``X_centered`` is not 2D or ``k`` not in ``[0, F]``.
         """
         if X_centered.ndim != 2:
             raise ValueError(f"X_centered must have shape [N, F], got {X_centered.shape}")
 
         _, F = X_centered.shape
-        if not (0 <= D <= F):
-            raise ValueError(f"D must be between 0 and F, got {D}")
+        if not (0 <= k <= F):
+            raise ValueError(f"k must be between 0 and F, got {k}")
 
-        cov = X_centered.T @ X_centered  # No need to scale since we only need the eigenvectors
+        cov = X_centered.T @ X_centered
         _, eigvecs = np.linalg.eigh(cov)
 
-        # eigh returns eigenvectors in ascending order of eigenvalues, so we need to reverse the order
         eigvecs = eigvecs[:, ::-1]
 
-        # Residual subspace = orthogonal complement of the top-D eigenvectors
-        return eigvecs[:, D:]
+        return eigvecs[:, k:]
 
     @staticmethod
     def compute_residual_norms(X_centered: ArrayLike, R: ArrayLike) -> ArrayLike:
-        """
-        Compute residual norms ||x_P⊥|| for each sample.
+        """Euclidean norm of each row projected onto columns of ``R``.
 
-        Parameters
-        ----------
-        X_centered : ArrayLike
-            Centered features, shape `(n_samples, n_features)`.
-        R : ArrayLike
-            Residual subspace basis, shape `(n_features, k)`.
+        Args:
+            X_centered: Shape ``(n_samples, n_features)``.
+            R: Residual basis, shape ``(n_features, n_residual)``.
 
-        Returns
-        -------
-        residual_norms : ArrayLike
-            Residual norms per sample, shape `(n_samples,)`.
+        Returns:
+            Norms, shape ``(n_samples,)``.
+
+        Raises:
+            ValueError: If shapes are invalid.
         """
         if X_centered.ndim != 2:
             raise ValueError(f"X_centered must have shape [N, F], got {X_centered.shape}")
@@ -267,22 +266,18 @@ class ViM(BaseDetector):
         residual_norms: ArrayLike,
         eps: float = 1e-12,
     ) -> float:
-        """
-        Compute alpha = mean(max logit) / mean(residual norm)
+        """Scale ``mean(max logit) / mean(residual norm)`` for virtual logit.
 
-        Parameters
-        ----------
-        logits : ArrayLike
-            Classifier logits, shape `(n_samples, n_classes)`.
-        residual_norms : ArrayLike
-            Residual norms, shape `(n_samples,)`.
-        eps : float
-            Small constant for numerical stability.
+        Args:
+            logits: Shape ``(n_samples, n_classes)``.
+            residual_norms: Shape ``(n_samples,)``.
+            eps: Denominator stabilization.
 
-        Returns
-        -------
-        alpha : float
-            Scalar computed from logits and residual norms.
+        Returns:
+            Scalar ``alpha``.
+
+        Raises:
+            ValueError: If batch sizes or ranks disagree.
         """
         if logits.ndim != 2:
             raise ValueError(f"logits must have shape [N, C], got {logits.shape}")
@@ -300,23 +295,18 @@ class ViM(BaseDetector):
         residual_norms: ArrayLike,
         alpha: float,
     ) -> ArrayLike:
-        """
-        Compute ViM probability by appending alpha * residual_norm as
-        a virtual logit and applying softmax.
+        """Softmax probability of the virtual class with logit ``alpha * residual_norm``.
 
-        Parameters
-        ----------
-        logits : ArrayLike
-            Classifier logits, shape `(n_samples, n_classes)`.
-        residual_norms : ArrayLike
-            Residual norms, shape `(n_samples,)`.
-        alpha : float
-            Scalar scale factor.
+        Args:
+            logits: Shape ``(n_samples, n_classes)``.
+            residual_norms: Shape ``(n_samples,)``.
+            alpha: Virtual-logit scale from ``compute_alpha``.
 
-        Returns
-        -------
-        vim_scores : ArrayLike
-            Probability of the virtual class, shape `(n_samples,)`.
+        Returns:
+            Last column of softmax on augmented logits, shape ``(n_samples,)``.
+
+        Raises:
+            ValueError: If shapes disagree.
         """
         alpha = float(alpha)
 
@@ -327,10 +317,9 @@ class ViM(BaseDetector):
                 f"residual_norms must have shape [N], got {residual_norms.shape}, expected ({logits.shape[0]},)"
             )
 
-        vim_logit = (alpha * residual_norms)[:, None]   # [N, 1]
-        augmented_logits = np.concatenate([logits, vim_logit], axis=1)  # [N, C+1]
+        vim_logit = (alpha * residual_norms)[:, None]
+        augmented_logits = np.concatenate([logits, vim_logit], axis=1)
 
-        # Numerically stable softmax
         shifted = augmented_logits - np.max(augmented_logits, axis=1, keepdims=True)
         exps = np.exp(shifted)
         softmax = exps / np.sum(exps, axis=1, keepdims=True)

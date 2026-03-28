@@ -1,7 +1,5 @@
 """
-Energy-based OOD detector (log-sum-exp energy over logits).
-
-Uses logits only. No training step.
+Energy-based OOD detector (log-sum-exp over logits).
 """
 
 from typing import TYPE_CHECKING
@@ -17,17 +15,23 @@ if TYPE_CHECKING:
 
 
 class Energy(BaseDetector):
-    """
-    Energy score: `E(x) = -T * log(sum_c exp(logits_c / T))`.
+    """Energy score from logits: ``E(x) = -T * log(sum_c exp(logits_c / T))``.
 
-    **Higher energy ⇒ more OOD** (typical usage; calibrate thresholds on validation).
+    Higher scores indicate more OOD; calibrate ``predict`` thresholds on validation
+    data. Requires ``features.logits`` with shape ``(n_samples, n_classes)``.
 
-    Expected inputs
-    ---------------
-    - `features.logits`, shape `(n_samples, n_classes)`
+    ``fit`` is a no-op.
     """
 
     def __init__(self, temperature: float = 1.0) -> None:
+        """Initialize with softmax temperature.
+
+        Args:
+            temperature: Positive ``T`` in ``logits / T`` before log-sum-exp.
+
+        Raises:
+            ValueError: If ``temperature <= 0``.
+        """
         if temperature <= 0:
             raise ValueError("temperature must be positive")
         self.temperature = float(temperature)
@@ -37,37 +41,29 @@ class Energy(BaseDetector):
         features_train: "Features",
         **kwargs: object,
     ) -> "Energy":
-        """
-        No-op for Energy (there is nothing to fit).
+        """No-op; Energy has no trainable state.
 
-        Parameters
-        ----------
-        features_train : Features
-            Ignored.
-        **kwargs : object
-            Ignored.
+        Args:
+            features_train: Ignored.
+            **kwargs: Ignored.
 
-        Returns
-        -------
-        self : Energy
+        Returns:
+            ``self``.
         """
         return self
 
     def score(self, features_test: "Features", **kwargs: object) -> ArrayLike:
-        """
-        Compute per-sample energy scores.
+        """Return per-sample energy scores.
 
-        Parameters
-        ----------
-        features_test : Features
-            Must provide `features_test.logits`.
-        **kwargs : object
-            Reserved.
+        Args:
+            features_test: Must provide ``logits`` with shape ``(n_samples, n_classes)``.
+            **kwargs: Unused.
 
-        Returns
-        -------
-        scores : ArrayLike
-            Shape `(n_samples,)`.
+        Returns:
+            Energies, shape ``(n_samples,)``, ``float64``.
+
+        Raises:
+            ValueError: If logits are missing or not 2D.
         """
         if features_test.logits is None:
             raise ValueError("Energy.score requires Features.logits")
@@ -87,25 +83,15 @@ class Energy(BaseDetector):
         threshold: float,
         **kwargs: object,
     ) -> ArrayLike:
-        """
-        Binary ID (0) / OOD (1) via `score > threshold`.
+        """Label samples OOD (1) when ``score > threshold``.
 
-        Energy scale depends on model and dataset; **threshold must be chosen on
-        validation data** (unlike MSP, there is no universal default).
+        Args:
+            features: Must provide ``logits``.
+            threshold: Validation-tuned cutoff (higher energy ⇒ OOD).
+            **kwargs: Forwarded to ``score()``.
 
-        Parameters
-        ----------
-        features : Features
-            Must provide `features.logits`.
-        threshold : float
-            Calibrated cutoff (higher energy ⇒ OOD).
-        **kwargs : object
-            Passed to `score()`.
-
-        Returns
-        -------
-        labels : ArrayLike
-            Shape `(n_samples,)`, values in `{0, 1}`.
+        Returns:
+            Integer labels, shape ``(n_samples,)``.
         """
         scores = self.score(features, **kwargs)
         return (scores > threshold).astype(int)

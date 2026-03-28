@@ -1,7 +1,5 @@
 """
 Maximum softmax probability (MSP) OOD detector.
-
-Uses logits only. No training step; scores are purely functional of logits.
 """
 
 from typing import TYPE_CHECKING
@@ -17,18 +15,22 @@ if TYPE_CHECKING:
 
 
 class MSP(BaseDetector):
-    """
-    Maximum softmax probability detector.
+    """Negative maximum softmax probability at temperature ``T``.
 
-    Uses temperature-scaled softmax; score is **negative** max probability so that
-    **higher score ⇒ more OOD** (consistent with `BaseDetector`).
-
-    Expected inputs
-    ---------------
-    - `features.logits`, shape `(n_samples, n_classes)`
+    Score is ``-max_c softmax(logits/T)_c`` so that **higher score ⇒ more OOD**,
+    matching ``BaseDetector``. Requires ``features.logits`` with shape
+    ``(n_samples, n_classes)``. ``fit`` is a no-op.
     """
 
     def __init__(self, temperature: float = 1.0) -> None:
+        """Initialize with softmax temperature.
+
+        Args:
+            temperature: Positive temperature for scaled softmax.
+
+        Raises:
+            ValueError: If ``temperature <= 0``.
+        """
         if temperature <= 0:
             raise ValueError("temperature must be positive")
         self.temperature = float(temperature)
@@ -38,39 +40,29 @@ class MSP(BaseDetector):
         features_train: "Features",
         **kwargs: object,
     ) -> "MSP":
-        """
-        No-op for MSP (there is nothing to fit).
+        """No-op; MSP has no trainable state.
 
-        Parameters
-        ----------
-        features_train : Features
-            Ignored.
-        **kwargs : object
-            Ignored.
+        Args:
+            features_train: Ignored.
+            **kwargs: Ignored.
 
-        Returns
-        -------
-        self : MSP
+        Returns:
+            ``self``.
         """
         return self
 
     def score(self, features_test: "Features", **kwargs: object) -> ArrayLike:
-        """
-        Per-sample score = `-max_c softmax(logits / T)_c`.
+        """Per-sample MSP scores (more OOD when less confident).
 
-        Higher score indicates more OOD (lower predictive confidence).
+        Args:
+            features_test: Must provide ``logits`` with shape ``(n_samples, n_classes)``.
+            **kwargs: Unused.
 
-        Parameters
-        ----------
-        features_test : Features
-            Must provide `features_test.logits`.
-        **kwargs : object
-            Reserved.
+        Returns:
+            Scores in roughly ``[-1, 0]``, shape ``(n_samples,)``.
 
-        Returns
-        -------
-        scores : ArrayLike
-            Shape `(n_samples,)`.
+        Raises:
+            ValueError: If logits are missing or not 2D.
         """
         if features_test.logits is None:
             raise ValueError("MSP.score requires Features.logits")
@@ -91,22 +83,15 @@ class MSP(BaseDetector):
         threshold: float = -0.5,
         **kwargs: object,
     ) -> ArrayLike:
-        """
-        Binary ID (0) / OOD (1) via `score > threshold`.
+        """Label OOD (1) when ``score > threshold``.
 
-        Parameters
-        ----------
-        features : Features
-            Must provide `features.logits`.
-        threshold : float, default=-0.5
-            Scores lie in about `[-1, 0]`; **calibrate on validation** for your model.
-        **kwargs : object
-            Passed to `score()`.
+        Args:
+            features: Must provide ``logits``.
+            threshold: Default ``-0.5`` is illustrative; tune on validation.
+            **kwargs: Forwarded to ``score()``.
 
-        Returns
-        -------
-        labels : ArrayLike
-            Shape `(n_samples,)`, values in `{0, 1}`.
+        Returns:
+            Integer labels, shape ``(n_samples,)``.
         """
         scores = self.score(features, **kwargs)
         return (scores > threshold).astype(int)

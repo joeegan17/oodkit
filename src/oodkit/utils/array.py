@@ -8,10 +8,17 @@ from oodkit.types import ArrayLike
 
 
 def to_numpy(x: ArrayLike) -> np.ndarray:
-    """
-    Convert supported inputs to NumPy arrays.
+    """Convert array-likes to ``np.ndarray`` (NumPy arrays or torch tensors).
 
-    Accepts NumPy arrays directly and torch tensors via ``detach().cpu().numpy()``.
+    Args:
+        x: NumPy array, torch tensor (via ``detach().cpu().numpy()``), or object
+            convertible with ``np.asarray``.
+
+    Returns:
+        A NumPy array view or copy.
+
+    Raises:
+        ValueError: If ``x`` is ``None``.
     """
     if x is None:
         raise ValueError("Expected array-like input, got None")

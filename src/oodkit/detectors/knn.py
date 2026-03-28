@@ -1,14 +1,5 @@
 """
-K-nearest neighbors (KNN) OOD detector on embeddings.
-
-Uses embeddings only. Fit stores an in-distribution embedding bank; score is
-the average Euclidean distance to the k nearest neighbors in that bank.
-
-Note
-----
-These distance-based methods often perform better when embeddings come from
-contrastive objectives (or similarly metric-aware training), because in-class
-neighbors become more semantically meaningful.
+K-nearest neighbors OOD detector on embeddings.
 """
 
 from typing import TYPE_CHECKING, Literal
@@ -24,12 +15,16 @@ if TYPE_CHECKING:
 
 
 class KNN(BaseDetector):
-    """
-    KNN detector over embedding space.
+    """Mean distance to ``k`` nearest in-distribution embedding neighbors.
 
-    Expected inputs
-    ---------------
-    - `features.embeddings`, shape `(n_samples, n_features)`
+    Higher scores indicate more OOD. Requires ``features.embeddings`` only.
+
+    With ``backend="auto"``, uses scikit-learn's ``NearestNeighbors`` when
+    installed; otherwise falls back to a NumPy Euclidean implementation (non-Euclidean
+    ``metric`` is ignored in that case).
+
+    Note:
+        KNN OOD scores often improve with metric-aware embeddings (e.g. contrastive).
     """
 
     def __init__(
@@ -38,6 +33,16 @@ class KNN(BaseDetector):
         backend: Literal["auto", "brute", "sklearn"] = "auto",
         metric: str = "euclidean",
     ) -> None:
+        """Configure neighbor count and distance backend.
+
+        Args:
+            k: Number of neighbors (must be ``>= 1`` and at most training size at ``fit``).
+            backend: ``"sklearn"``, ``"brute"`` (NumPy), or ``"auto"``.
+            metric: Passed to scikit-learn when that backend is used.
+
+        Raises:
+            ValueError: If ``k < 1``, ``backend`` is invalid, or ``metric`` is empty.
+        """
         if k < 1:
             raise ValueError("k must be >= 1")
         if backend not in {"auto", "brute", "sklearn"}:
@@ -49,6 +54,19 @@ class KNN(BaseDetector):
         self.metric = metric
 
     def fit(self, features_train: "Features", **kwargs: object) -> "KNN":
+        """Store ID embeddings and optionally build sklearn index.
+
+        Args:
+            features_train: Must provide ``embeddings`` with at least ``k`` rows.
+            **kwargs: Unused.
+
+        Returns:
+            ``self``.
+
+        Raises:
+            ValueError: If embeddings are missing, wrong shape, or fewer than ``k`` samples.
+            ImportError: If ``backend="sklearn"`` and scikit-learn is not installed.
+        """
         if features_train.embeddings is None:
             raise ValueError("KNN.fit requires Features.embeddings")
         train_embeddings = to_numpy(features_train.embeddings)
@@ -76,6 +94,19 @@ class KNN(BaseDetector):
         return self
 
     def score(self, features_test: "Features", **kwargs: object) -> ArrayLike:
+        """Average distance to ``k`` nearest neighbors in the training bank.
+
+        Args:
+            features_test: ``embeddings`` with same feature dimension as ``fit``.
+            **kwargs: Unused.
+
+        Returns:
+            Mean neighbor distances, shape ``(n_samples,)``.
+
+        Raises:
+            RuntimeError: If not fitted.
+            ValueError: If embeddings are missing or wrong shape.
+        """
         self._check_is_fitted()
 
         if features_test.embeddings is None:
@@ -100,15 +131,27 @@ class KNN(BaseDetector):
         threshold: float,
         **kwargs: object,
     ) -> ArrayLike:
+        """Predict OOD (1) when ``score > threshold``.
+
+        Args:
+            features: Embeddings for ``score()``.
+            threshold: Validation-tuned cutoff.
+            **kwargs: Forwarded to ``score()``.
+
+        Returns:
+            Labels ``{0, 1}``, shape ``(n_samples,)``.
+        """
         scores = self.score(features, **kwargs)
         return (scores > threshold).astype(int)
 
     def _check_is_fitted(self) -> None:
+        """Raise if ``fit`` has not run."""
         missing = [name for name in ("train_embeddings_", "n_features_in_", "backend_") if not hasattr(self, name)]
         if missing:
             raise RuntimeError(f"KNN instance is not fitted yet. Missing: {missing}")
 
     def _resolve_backend(self) -> Literal["brute", "sklearn"]:
+        """Choose sklearn or NumPy neighbor search."""
         if self.backend == "brute":
             return "brute"
         if self.backend == "sklearn":
@@ -120,7 +163,6 @@ class KNN(BaseDetector):
                 ) from exc
             return "sklearn"
 
-        # auto: prefer sklearn if available, otherwise pure NumPy brute force.
         try:
             import sklearn  # noqa: F401
         except ImportError:
@@ -129,7 +171,7 @@ class KNN(BaseDetector):
         return "sklearn"
 
     def _score_bruteforce(self, query_embeddings: np.ndarray) -> np.ndarray:
-        # Efficient pairwise L2 distances via ||x-y||^2 = ||x||^2 + ||y||^2 - 2x@y.
+        """Euclidean k-NN mean distance via expanded L2 norm formula."""
         train_sq = np.sum(self.train_embeddings_ ** 2, axis=1)[None, :]
         query_sq = np.sum(query_embeddings ** 2, axis=1)[:, None]
         pairwise_sq = query_sq + train_sq - 2.0 * (query_embeddings @ self.train_embeddings_.T)
