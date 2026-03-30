@@ -14,6 +14,11 @@ def test_pca_fusion_temperature_eps_validation():
         PCAFusion(eps=0.0)
 
 
+def test_pca_fusion_kernel_invalid():
+    with pytest.raises(ValueError, match="kernel"):
+        PCAFusion(kernel="bad")  # type: ignore[arg-type]
+
+
 def test_pca_fusion_fit_requires_two_features():
     d = PCAFusion(n_components=1)
     X = np.array([[0.0], [1.0]], dtype=np.float64)

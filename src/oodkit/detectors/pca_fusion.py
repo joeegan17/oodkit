@@ -3,99 +3,100 @@ PCA reconstruction fused with log-sum-exp of logits (Guan et al., ICCV 2023).
 
 Paper: https://openaccess.thecvf.com/content/ICCV2023/html/Guan_Revisit_PCA-based_Technique_for_Out-of-Distribution_Detection_ICCV_2023_paper.html
 PDF: https://openaccess.thecvf.com/content/ICCV2023/papers/Guan_Revisit_PCA-based_Technique_for_Out-of-Distribution_Detection_ICCV_2023_paper.pdf
+
+Kernel variants (linear / cosine CoP / RFF-cosine CoRP) follow Fang et al., NeurIPS 2024
+for the reconstruction term; see ``oodkit.detectors.pca`` and ``pca_common``.
+https://proceedings.neurips.cc/paper_files/paper/2024/file/f2543511e5f4d4764857f9ad833a977d-Paper-Conference.pdf
 """
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional, Union
 
 import numpy as np
 
 from oodkit.detectors.base import BaseDetector
+from oodkit.detectors.pca_common import (
+    fit_pca_subspace,
+    guan_r,
+    reconstruction_errors_batch,
+)
 from oodkit.types import ArrayLike
 from oodkit.utils.array import to_numpy
 
 if TYPE_CHECKING:
     from oodkit.data.features import Features
 
-
-def _select_principal_subspace_dim(
-    evals_desc: np.ndarray,
-    n_features: int,
-    n_components: Optional[int],
-    pct_variance: float,
-) -> int:
-    """Resolve principal subspace dimension ``k`` from explicit count or variance threshold."""
-    if n_components is not None:
-        k = int(n_components)
-        if k < 0 or k >= n_features:
-            raise ValueError(
-                f"n_components must satisfy 0 <= n_components < {n_features}, got {k}"
-            )
-        return k
-    if not (0.0 < pct_variance <= 1.0):
-        raise ValueError("pct_variance must be in (0, 1]")
-    total = float(np.sum(evals_desc))
-    if total <= 0:
-        return 1
-    cum_ratio = np.cumsum(evals_desc) / total
-    k = int(np.searchsorted(cum_ratio, pct_variance, side="left")) + 1
-    return int(max(1, min(k, n_features - 1)))
+KernelArg = Literal["linear", "cosine", "rff_cosine"]
 
 
 class PCAFusion(BaseDetector):
-    """Guan et al. (ICCV 2023) PCA reconstruction error fused with log-sum-exp logits.
+    """Guan et al. (ICCV 2023) fusion of PCA reconstruction error and log-sum-exp logits.
 
-    Fit uses mean-centered ID embeddings to build a top-``k`` PCA subspace.
-    Scores follow the paper up to sign: this library returns ``-D`` so that
-    **higher score means more OOD**, consistent with other detectors (the paper
-    associates larger ``D`` with ID-like behavior).
+    Fit uses in-distribution embeddings to build a top-``k`` PCA subspace (linear,
+    cosine / CoP, or RFF-cosine / CoRP — same kernels as ``PCA``). The ICCV paper
+    defines a score ``D`` where larger values mean more in-distribution; this library
+    returns **negative D** so that **higher returned values mean more OOD**, like
+    other detectors.
 
-    ``fit`` requires ``features.embeddings`` with shape ``(n_samples, n_features)``.
-    ``score`` and ``predict`` require both ``embeddings`` and ``logits``.
+    ``fit`` requires ``features.embeddings``. ``score`` and ``predict`` require
+    ``embeddings`` and ``logits``.
     """
 
     def __init__(
         self,
+        kernel: KernelArg = "linear",
         n_components: Optional[int] = None,
         pct_variance: float = 0.95,
         temperature: float = 1.0,
         eps: float = 1e-12,
+        rff_dim: int = 256,
+        rff_gamma: float = 1.0,
+        random_state: Optional[Union[int, np.random.Generator]] = None,
     ) -> None:
-        """Configure PCA subspace selection and fusion numerics.
+        """Configure kernel PCA, subspace selection, and fusion numerics.
 
         Args:
-            n_components: Fixed number of principal components to retain for
-                reconstruction. If ``None``, ``pct_variance`` chooses ``k``.
-            pct_variance: When ``n_components`` is ``None``, smallest ``k`` such that
-                the top ``k`` eigenvalues explain at least this fraction of variance
-                (on mean-centered training embeddings). Default ``0.95``.
-            temperature: Logit temperature ``T`` in ``logits / T`` inside log-sum-exp
-                (same convention as ``Energy``).
-            eps: Added to ``||h||`` in the denominator of the normalized reconstruction
-                error for stability.
+            kernel: ``"linear"``, ``"cosine"`` (CoP), or ``"rff_cosine"`` (CoRP).
+            n_components: Fixed ``k``; if ``None``, ``pct_variance`` selects ``k``.
+            pct_variance: Variance threshold on the working covariance when
+                ``n_components`` is ``None``.
+            temperature: Temperature scaling logits before log-sum-exp (divide logits by this).
+            eps: Small constant added to the embedding row L2 norm in the denominator of ``r``.
+            rff_dim: RFF dimension for ``rff_cosine``.
+            rff_gamma: RBF ``gamma`` for RFF when ``kernel == "rff_cosine"``.
+            random_state: RNG seed for RFF weights (``rff_cosine`` only).
 
         Raises:
-            ValueError: If ``temperature <= 0`` or ``eps <= 0``.
+            ValueError: If ``temperature <= 0``, ``eps <= 0``, or kernel invalid.
         """
         if temperature <= 0:
             raise ValueError("temperature must be positive")
         if eps <= 0:
             raise ValueError("eps must be positive")
+        if kernel not in ("linear", "cosine", "rff_cosine"):
+            raise ValueError("kernel must be 'linear', 'cosine', or 'rff_cosine'")
+        self.kernel = kernel
         self.n_components = n_components
         self.pct_variance = float(pct_variance)
         self.temperature = float(temperature)
         self.eps = float(eps)
+        self.rff_dim = int(rff_dim)
+        self.rff_gamma = float(rff_gamma)
+        if isinstance(random_state, np.random.Generator):
+            self._rng = random_state
+        else:
+            self._rng = np.random.default_rng(random_state)
 
     def fit(
         self,
         features_train: "Features",
         **kwargs: object,
     ) -> "PCAFusion":
-        """Fit mean and top-``k`` PCA basis on in-distribution embeddings.
+        """Fit PCA subspace on in-distribution embeddings.
 
         Args:
             features_train: Must provide ``embeddings`` with at least two samples and
                 two feature dimensions.
-            **kwargs: Unused; reserved for future options.
+            **kwargs: Unused.
 
         Returns:
             ``self``.
@@ -114,30 +115,25 @@ class PCAFusion(BaseDetector):
         if n_samples < 2:
             raise ValueError("PCAFusion.fit requires at least 2 samples")
 
-        self.mean_ = X.mean(axis=0).astype(np.float64, copy=False)
-        Xc = X - self.mean_
-        cov = Xc.T @ Xc
-        evals, eigvecs = np.linalg.eigh(cov)
-        eigvecs = eigvecs[:, ::-1]
-        evals_desc = evals[::-1]
-
-        k = _select_principal_subspace_dim(
-            evals_desc,
-            n_features,
+        self._state = fit_pca_subspace(
+            X,
+            self.kernel,
             self.n_components,
             self.pct_variance,
+            self.rff_dim,
+            self.rff_gamma,
+            self._rng,
         )
-        self.n_components_fitted_ = k
-        self.principal_basis_ = eigvecs[:, :k] if k > 0 else np.zeros((n_features, 0), dtype=np.float64)
-        self.n_features_in_ = n_features
         return self
 
     def score(self, features_test: "Features", **kwargs: object) -> ArrayLike:
-        """Compute per-sample OOD scores (negated paper ``D``).
+        """Per-sample score is negative of the paper's D (see Guan et al. Eq. 13).
+
+        Up to temperature scaling, D is (1 - r) times log-sum-exp of logits, with
+        r from normalized reconstruction error; implementation returns ``-D``.
 
         Args:
-            features_test: Must provide ``embeddings`` and ``logits`` with matching
-                batch size and embedding dim equal to ``n_features_in_`` from ``fit``.
+            features_test: ``embeddings`` and ``logits`` with matching batch size.
             **kwargs: Unused.
 
         Returns:
@@ -164,24 +160,13 @@ class PCAFusion(BaseDetector):
             raise ValueError(
                 f"batch mismatch: embeddings {h.shape[0]} vs logits {logits.shape[0]}"
             )
-        if h.shape[1] != self.n_features_in_:
+        if h.shape[1] != self._state.n_features_in_:
             raise ValueError(
-                f"expected {self.n_features_in_} features, got {h.shape[1]}"
+                f"expected {self._state.n_features_in_} features, got {h.shape[1]}"
             )
 
-        mean = self.mean_
-        k = self.n_components_fitted_
-        V = self.principal_basis_
-        centered = h - mean
-        if k == 0:
-            h_hat = np.broadcast_to(mean, h.shape).copy()
-        else:
-            coef = centered @ V
-            h_hat = mean + coef @ V.T
-
-        recon_err = np.linalg.norm(h - h_hat, axis=1)
-        h_norm = np.linalg.norm(h, axis=1)
-        r = np.clip(recon_err / (h_norm + self.eps), 0.0, 1.0)
+        recon_err = reconstruction_errors_batch(self._state, h)
+        r = guan_r(recon_err, h, self.eps)
 
         T = self.temperature
         scaled = logits / T
@@ -209,9 +194,12 @@ class PCAFusion(BaseDetector):
         scores = self.score(features, **kwargs)
         return (scores > threshold).astype(int)
 
+    @property
+    def n_components_fitted_(self) -> int:
+        """Number of principal components retained after ``fit``."""
+        self._check_is_fitted()
+        return self._state.n_components_fitted_
+
     def _check_is_fitted(self) -> None:
-        """Ensure ``fit`` has populated PCA attributes."""
-        needed = ("mean_", "principal_basis_", "n_components_fitted_", "n_features_in_")
-        missing = [n for n in needed if not hasattr(self, n)]
-        if missing:
-            raise RuntimeError(f"PCAFusion is not fitted yet. Missing: {missing}")
+        if not hasattr(self, "_state"):
+            raise RuntimeError("PCAFusion is not fitted yet.")
