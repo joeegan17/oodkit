@@ -12,6 +12,18 @@ from oodkit.detectors.msp import MSP
 from oodkit.detectors.pca import PCA
 from oodkit.detectors.pca_fusion import PCAFusion
 from oodkit.detectors.vim import ViM
+from oodkit.detectors.wdiscood import WDiscOOD
 from oodkit.data.features import Features
 
-__all__ = ["BaseDetector", "Energy", "Features", "KNN", "Mahalanobis", "MSP", "PCA", "PCAFusion", "ViM"]
+__all__ = [
+    "BaseDetector",
+    "Energy",
+    "Features",
+    "KNN",
+    "Mahalanobis",
+    "MSP",
+    "PCA",
+    "PCAFusion",
+    "ViM",
+    "WDiscOOD",
+]
