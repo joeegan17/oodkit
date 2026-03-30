@@ -35,10 +35,15 @@ class WDiscOOD(BaseDetector):
 
     Fit requires ``Features.embeddings`` and per-sample class labels ``y``.
     LDA directions are orthonormalized (QR) so the WD projector is orthogonal;
-    distances use **global-mean-centered** features in WD and WDR. The final
-    score is ``d_wd_norm + alpha * d_wdr_norm`` where each distance term is
+    distances use **global-mean-centered** features in WD and WDR. 
+    
+    The final score is ``d_wd_norm + alpha * d_wdr_norm`` where each distance term is
     divided by its training-set median (plus ``eps``) so ``alpha`` scales
     comparable channels.
+
+    In othe words, distances are normalized by training-set medians before fusion.
+    This deviates slightly from the original paper, but makes alpha
+    scale-invariant and more user-friendly.
 
     ``score`` uses embeddings only (class structure is fixed at fit time).
     """
@@ -77,7 +82,7 @@ class WDiscOOD(BaseDetector):
     def fit(
         self,
         features_train: "Features",
-        y: Optional[ArrayLike] = None,
+        y: ArrayLike,
         **kwargs: object,
     ) -> "WDiscOOD":
         """Fit LDA subspaces and training-set distance medians.
@@ -90,7 +95,7 @@ class WDiscOOD(BaseDetector):
             ``self``.
 
         Raises:
-            ValueError: If ``y`` is missing, embeddings invalid, ``C < 2``, or
+            ValueError: If ``y`` is ``None``, embeddings invalid, ``C < 2``, or
                 ``n_discriminants`` is out of range.
         """
         if y is None:
