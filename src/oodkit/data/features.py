@@ -17,7 +17,7 @@ class Features:
         The name ``Features`` refers to general model outputs, not embeddings alone.
         Embedding preprocessing (e.g. L2 row-normalization) is **caller-controlled**
         unless a detector’s definition applies it internally (e.g. cosine/RFF kernels
-        in PCA). The project ROADMAP states this policy explicitly.
+        in PCA).
     """
 
     def __init__(
