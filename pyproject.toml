@@ -17,6 +17,7 @@ dev = [
 ml = [
     "torch",
     "torchvision",
+    "transformers",
 ]
 
 [build-system]
