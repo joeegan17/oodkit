@@ -12,6 +12,6 @@ COPY . .
 
 # Install package in editable mode
 RUN pip install --upgrade pip
-RUN pip install -e .[dev, ml]
+RUN pip install -e .[dev,ml]
 
 CMD ["bash"]
