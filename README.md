@@ -43,7 +43,7 @@ maha = Mahalanobis(eps=1e-6)
 maha.fit(Features(embeddings=...), y=...)  # y defaults to single Gaussian if omitted
 scores_maha = maha.score(Features(embeddings=...))
 
-# KNN: embeddings only, score = avg distance to k nearest ID embeddings
+# KNN: embeddings only, score = distance to k-th nearest ID embedding
 knn = KNN(k=10, backend="auto", metric="cosine")  # metric passed through when sklearn backend is used
 knn.fit(Features(embeddings=...))
 scores_knn = knn.score(Features(embeddings=...))

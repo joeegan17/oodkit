@@ -1,5 +1,7 @@
 """
 K-nearest neighbors OOD detector on embeddings.
+
+Paper: https://arxiv.org/pdf/2204.06507
 """
 
 from typing import TYPE_CHECKING, Literal
@@ -15,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class KNN(BaseDetector):
-    """Mean distance to ``k`` nearest in-distribution embedding neighbors.
+    """Distance to the ``k``-th nearest in-distribution embedding neighbor.
 
     Higher scores indicate more OOD. Requires ``features.embeddings`` only.
 
@@ -94,14 +96,14 @@ class KNN(BaseDetector):
         return self
 
     def score(self, features_test: "Features", **kwargs: object) -> ArrayLike:
-        """Average distance to ``k`` nearest neighbors in the training bank.
+        """Distance to the ``k``-th nearest neighbor in the training bank.
 
         Args:
             features_test: ``embeddings`` with same feature dimension as ``fit``.
             **kwargs: Unused.
 
         Returns:
-            Mean neighbor distances, shape ``(n_samples,)``.
+            Per-sample distance to the ``k``-th nearest neighbor, shape ``(n_samples,)``.
 
         Raises:
             RuntimeError: If not fitted.
@@ -122,7 +124,8 @@ class KNN(BaseDetector):
 
         if self.backend_ == "sklearn":
             distances, _ = self._nn.kneighbors(query_embeddings, n_neighbors=self.k)
-            return distances.mean(axis=1)
+            # kneighbors returns distances sorted ascending; last column is k-th NN.
+            return distances[:, -1]
         return self._score_bruteforce(query_embeddings)
 
     def predict(
@@ -171,12 +174,12 @@ class KNN(BaseDetector):
         return "sklearn"
 
     def _score_bruteforce(self, query_embeddings: np.ndarray) -> np.ndarray:
-        """Euclidean k-NN mean distance via expanded L2 norm formula."""
+        """Euclidean distance to the k-th nearest neighbor via expanded L2 norm formula."""
         train_sq = np.sum(self.train_embeddings_ ** 2, axis=1)[None, :]
         query_sq = np.sum(query_embeddings ** 2, axis=1)[:, None]
         pairwise_sq = query_sq + train_sq - 2.0 * (query_embeddings @ self.train_embeddings_.T)
         np.maximum(pairwise_sq, 0.0, out=pairwise_sq)
         pairwise = np.sqrt(pairwise_sq)
 
-        nearest_k = np.partition(pairwise, kth=self.k - 1, axis=1)[:, : self.k]
-        return nearest_k.mean(axis=1)
+        partitioned = np.partition(pairwise, kth=self.k - 1, axis=1)
+        return partitioned[:, self.k - 1]
