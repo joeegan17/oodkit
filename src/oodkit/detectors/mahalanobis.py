@@ -1,5 +1,7 @@
 """
 Class-conditional Mahalanobis OOD detector on embeddings.
+
+Paper: https://papers.nips.cc/paper_files/paper/2018/hash/abdeb6f575ac5c6676b747bca8d09cc2-Abstract.html
 """
 
 from typing import TYPE_CHECKING, Optional

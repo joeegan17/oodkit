@@ -1,5 +1,7 @@
 """
 Energy-based OOD detector (log-sum-exp over logits).
+
+Paper: https://arxiv.org/pdf/2010.03759
 """
 
 from typing import TYPE_CHECKING

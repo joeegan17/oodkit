@@ -1,5 +1,7 @@
 """
 Maximum softmax probability (MSP) OOD detector.
+
+Paper: https://arxiv.org/pdf/1610.02136
 """
 
 from typing import TYPE_CHECKING
