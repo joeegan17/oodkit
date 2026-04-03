@@ -75,4 +75,7 @@ Tests mirror `src/oodkit/` under `tests/pkg/` (e.g. `tests/pkg/detectors/test_ms
 
 - `oodkit/detectors/` — OOD detectors (ViM, MSP, Energy, Mahalanobis, KNN, PCA, PCAFusion, …) with sklearn-style fit/score/predict
 - `oodkit/data/` — Features container for logits and embeddings
+- `oodkit/embeddings/` — `Embedder`, disk-backed extraction, optional training (`pip install ".[ml]"`)
+- `oodkit/evaluation/` — `ScoreBank`, metrics, plots, and helpers to merge ID/OOD `EmbeddingResult` blocks (`concatenate_embedding_results`, `ood_labels_from_counts`, …)
+- `oodkit/contrib/` — Optional cookbook code (not required for core usage). `oodkit.contrib.imagenet` — `LOC_synset_mapping.txt` → `SynsetTable`, `SynsetImageDataset` / `imagenet_variant_dataset` for ImageFolder-style ImageNet variants with **canonical** class indices (needs torch/torchvision)
 - `oodkit/utils/` — Linear algebra and other helpers

@@ -1,0 +1,82 @@
+"""Tests for ``oodkit.evaluation.combine``."""
+
+import numpy as np
+import pytest
+
+from oodkit.embeddings.result import EmbeddingResult
+from oodkit.evaluation.combine import (
+    concatenate_embedding_results,
+    ood_labels_from_blocks,
+    ood_labels_from_counts,
+)
+
+
+def test_ood_labels_from_counts():
+    y = ood_labels_from_counts(3, 2)
+    np.testing.assert_array_equal(y, np.array([0, 0, 0, 1, 1]))
+
+
+def test_ood_labels_from_counts_negative_raises():
+    with pytest.raises(ValueError, match="non-negative"):
+        ood_labels_from_counts(-1, 1)
+
+
+def test_ood_labels_from_blocks():
+    y = ood_labels_from_blocks([2, 1, 3], [0, 1, 0])
+    np.testing.assert_array_equal(y, np.array([0, 0, 1, 0, 0, 0]))
+
+
+def test_ood_labels_from_blocks_empty():
+    y = ood_labels_from_blocks([], [])
+    assert y.shape == (0,)
+
+
+def test_ood_labels_from_blocks_mismatch_raises():
+    with pytest.raises(ValueError, match="same length"):
+        ood_labels_from_blocks([1], [0, 1])
+
+
+def test_concatenate_embedding_results_basic():
+    r_id = EmbeddingResult(
+        embeddings=np.zeros((2, 4), dtype=np.float32),
+        labels=np.array([0, 1], dtype=np.int64),
+        metadata={"image_paths": ["/a", "/b"]},
+    )
+    r_ood = EmbeddingResult(
+        embeddings=np.ones((3, 4), dtype=np.float32),
+        labels=np.array([5, 5, 5], dtype=np.int64),
+        metadata={"image_paths": ["/c", "/d", "/e"]},
+    )
+    comb, ood = concatenate_embedding_results([r_id, r_ood], [0, 1])
+    assert comb.embeddings.shape == (5, 4)
+    assert comb.labels is not None and comb.labels.shape == (5,)
+    np.testing.assert_array_equal(ood, np.array([0, 0, 1, 1, 1]))
+    assert comb.metadata["image_paths"] == ["/a", "/b", "/c", "/d", "/e"]
+
+
+def test_concatenate_embedding_results_with_logits():
+    r1 = EmbeddingResult(
+        embeddings=np.zeros((1, 2), dtype=np.float32),
+        logits=np.zeros((1, 10), dtype=np.float32),
+    )
+    r2 = EmbeddingResult(
+        embeddings=np.ones((1, 2), dtype=np.float32),
+        logits=np.ones((1, 10), dtype=np.float32),
+    )
+    comb, ood = concatenate_embedding_results([r1, r2], [0, 1])
+    assert comb.logits is not None and comb.logits.shape == (2, 10)
+    np.testing.assert_array_equal(ood, np.array([0, 1]))
+
+
+def test_concatenate_embedding_results_logits_mismatch_raises():
+    r1 = EmbeddingResult(embeddings=np.zeros((1, 2), dtype=np.float32), logits=np.zeros((1, 3)))
+    r2 = EmbeddingResult(embeddings=np.ones((1, 2), dtype=np.float32))
+    with pytest.raises(ValueError, match="logits"):
+        concatenate_embedding_results([r1, r2], [0, 1])
+
+
+def test_concatenate_embedding_results_emb_dim_mismatch_raises():
+    r1 = EmbeddingResult(embeddings=np.zeros((1, 2)))
+    r2 = EmbeddingResult(embeddings=np.ones((1, 3)))
+    with pytest.raises(ValueError, match="feature dimension"):
+        concatenate_embedding_results([r1, r2], [0, 1])

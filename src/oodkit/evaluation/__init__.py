@@ -45,6 +45,11 @@ from oodkit.evaluation.compare import (
     score_correlation,
 )
 from oodkit.evaluation.performance import PerformanceCurve, score_vs_metric
+from oodkit.evaluation.combine import (
+    concatenate_embedding_results,
+    ood_labels_from_blocks,
+    ood_labels_from_counts,
+)
 from oodkit.evaluation import plots
 
 __all__ = [
@@ -68,6 +73,10 @@ __all__ = [
     # Performance
     "PerformanceCurve",
     "score_vs_metric",
+    # Combine ID/OOD results
+    "concatenate_embedding_results",
+    "ood_labels_from_blocks",
+    "ood_labels_from_counts",
     # Plots (namespace import)
     "plots",
 ]
