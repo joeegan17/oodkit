@@ -10,8 +10,12 @@ RUN apt-get update && apt-get install -y \
 # Copy project
 COPY . .
 
-# Install package in editable mode
 RUN pip install --upgrade pip
+
+# Install CUDA-enabled PyTorch FIRST (important)
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
+
+# Install package in editable mode
 RUN pip install -e .[dev,ml]
 
 CMD ["bash"]

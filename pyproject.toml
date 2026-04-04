@@ -20,6 +20,7 @@ ml = [
     "torch",
     "torchvision",
     "transformers",
+    "pandas",
 ]
 
 [build-system]

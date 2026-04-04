@@ -29,3 +29,6 @@ coverage.xml
 # Roadmap
 ROADMAP.md
 MVP_TODO.md
+
+# Non-demo notebooks for development
+moving_imagenet_files.ipynb
