@@ -29,7 +29,8 @@ def test_add_single_detector():
     bank.add("MSP", scores)
     assert bank.detectors == ["MSP"]
     assert bank.n_samples == 3
-    np.testing.assert_array_equal(bank.scores_for("MSP"), scores)
+    assert bank.scores_for("MSP").dtype == np.float32
+    np.testing.assert_allclose(bank.scores_for("MSP"), scores, rtol=0, atol=1e-6)
 
 
 def test_add_chaining():
@@ -60,6 +61,8 @@ def test_ood_labels_stored():
     bank = ScoreBank(ood_labels=labels)
     bank.add("MSP", np.array([0.1, 0.2, 0.8, 0.9]))
     assert bank.has_ood_labels
+    assert bank.ood_labels is not None
+    assert bank.ood_labels.dtype == np.int32
     np.testing.assert_array_equal(bank.ood_labels, labels)
 
 
@@ -68,6 +71,8 @@ def test_class_labels_stored():
     bank = ScoreBank(class_labels=cls)
     bank.add("MSP", np.ones(4))
     assert bank.has_class_labels
+    assert bank.class_labels is not None
+    assert bank.class_labels.dtype == np.int32
     np.testing.assert_array_equal(bank.class_labels, cls)
     np.testing.assert_array_equal(bank.classes, [0, 1])
 

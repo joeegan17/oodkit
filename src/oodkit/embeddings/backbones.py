@@ -2,6 +2,9 @@
 Backbone preset registry for ``oodkit.embeddings``.
 
 Loads pretrained vision transformers via HuggingFace ``transformers``.
+**Default aliases** are **DINOv2** (public checkpoints). **DINOv3** presets
+remain available but may be gated on Hugging Face (login + terms).
+
 Only this module contains model-specific logic; the rest of the embeddings
 package is backbone-agnostic.
 """
@@ -28,6 +31,20 @@ class BackbonePreset:
 
 
 PRESETS = {
+    # DINOv2 — public on Hugging Face; default family for Embedder.
+    "dinov2-small": BackbonePreset(
+        hf_model_id=f"{_HF_PREFIX}dinov2-small",
+        embed_dim=384,
+    ),
+    "dinov2-base": BackbonePreset(
+        hf_model_id=f"{_HF_PREFIX}dinov2-base",
+        embed_dim=768,
+    ),
+    "dinov2-large": BackbonePreset(
+        hf_model_id=f"{_HF_PREFIX}dinov2-large",
+        embed_dim=1024,
+    ),
+    # DINOv3 — may be gated; requires HF login + accepted terms on the model card.
     "dinov3-small": BackbonePreset(
         hf_model_id=f"{_HF_PREFIX}dinov3-vits16-pretrain-lvd1689m",
         embed_dim=384,
@@ -47,7 +64,7 @@ def load_backbone(name: str) -> Tuple[nn.Module, Any, int]:
     """Load a pretrained backbone by short alias.
 
     Args:
-        name: Key in ``PRESETS`` (e.g. ``"dinov3-small"``).
+        name: Key in ``PRESETS`` (e.g. ``"dinov2-small"``).
 
     Returns:
         ``(model, processor, embed_dim)`` where ``processor`` is a HuggingFace

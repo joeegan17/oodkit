@@ -15,9 +15,11 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     volumes:
-      - /mnt/c/dev:/workspace
+      - /mnt/c/dev/repos/oodkit:/workspace/repos/oodkit
+      - /home/joeegan17/datasets:/datasets
     working_dir: /workspace/repos/oodkit
     gpus: all
+    shm_size: "20gb"
     ports:
       - "8888:8888"
     command: >

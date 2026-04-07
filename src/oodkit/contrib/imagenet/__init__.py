@@ -9,7 +9,7 @@ Example::
     from oodkit.embeddings.backbones import load_backbone
     from oodkit.embeddings.embedder import Embedder
 
-    _, processor, _ = load_backbone("dinov3-small")
+    _, processor, _ = load_backbone("dinov2-small")
     emb = Embedder()
     ds = imagenet_variant_dataset(
         "path/to/imagenet-o",

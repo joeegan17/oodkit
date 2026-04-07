@@ -32,3 +32,6 @@ MVP_TODO.md
 
 # Non-demo notebooks for development
 moving_imagenet_files.ipynb
+
+# Egg
+src/oodkit.egg-info

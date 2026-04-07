@@ -17,18 +17,18 @@ from oodkit.data import Features
 # Create features (logits, embeddings, or both)
 features = Features(logits=..., embeddings=...)
 
-# ViM: fit on ID data (principal subspace: n_components or pct_variance), then score
-detector = ViM(W, b, n_components=1)  # or ViM(W, b) for default pct_variance=0.95
+# ViM: fit on ID data; default keeps components until 95% cumulative variance (pct_variance)
+detector = ViM(W, b)
 detector.fit(features)
 scores = detector.score(features)
 
 # PCA: reconstruction error only (linear, cosine/CoP, or rff_cosine/CoRP); higher score = more OOD
-pca = PCA(kernel="linear", n_components=1)
+pca = PCA(kernel="linear")
 pca.fit(Features(embeddings=...))
 scores_pca_only = pca.score(Features(embeddings=...))
 
 # PCAFusion (Guan et al. ICCV 2023): same kernels as PCA + log-sum-exp fusion; score negated so higher = more OOD
-pca_f = PCAFusion(kernel="linear", n_components=1)  # or PCAFusion() for default pct_variance=0.95
+pca_f = PCAFusion(kernel="linear")
 pca_f.fit(Features(embeddings=...))
 scores_pca = pca_f.score(Features(embeddings=..., logits=...))
 labels_pca = pca_f.predict(Features(embeddings=..., logits=...), threshold=...)  # calibrate threshold on validation
@@ -70,6 +70,10 @@ pytest
 With Docker: `docker compose run --rm dev pytest` (torch tests skipped unless you install `torch` in the image or extend the Dockerfile with `.[ml]`).
 
 Tests mirror `src/oodkit/` under `tests/pkg/` (e.g. `tests/pkg/detectors/test_msp.py`). The folder is named `pkg` so it does not shadow the installed `oodkit` package on `sys.path`. Shared synthetic data and `Features` bundles live in `tests/conftest.py`.
+
+## Demo script
+
+- [`notebooks/imagenet_ood_showcase.py`](notebooks/imagenet_ood_showcase.py) — train a classifier head on ImageNet val, run multiple OOD detectors, and compare ID vs ImageNet-O with `ScoreBank` / `evaluate` (see [`notebooks/README.md`](notebooks/README.md)).
 
 ## Package structure
 

@@ -77,6 +77,7 @@ def make_dataloader(
     num_workers: int = 1,
     shuffle: bool = False,
     pin_memory: Optional[bool] = None,
+    persistent_workers: bool = False,
 ) -> DataLoader:
     """Wrap a ``Dataset`` in a ``DataLoader`` with sensible defaults.
 
@@ -86,16 +87,21 @@ def make_dataloader(
         num_workers: Parallel data-loading workers.
         shuffle: Whether to shuffle every epoch.
         pin_memory: If ``None``, enabled when CUDA is available.
+        persistent_workers: Keep worker processes alive between epochs (only
+            applied when ``num_workers > 0``).
 
     Returns:
         A ``DataLoader``.
     """
     if pin_memory is None:
         pin_memory = torch.cuda.is_available()
-    return DataLoader(
-        dataset,
+    kw: dict = dict(
+        dataset=dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=pin_memory,
     )
+    if num_workers > 0 and persistent_workers:
+        kw["persistent_workers"] = True
+    return DataLoader(**kw)

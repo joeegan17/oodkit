@@ -10,7 +10,7 @@ Public API::
 
     from oodkit.embeddings import Embedder, EmbeddingResult, load_embeddings
 
-    emb = Embedder()                       # DINOv3-S by default
+    emb = Embedder()                       # DINOv2-S by default
     result = emb.extract("path/to/images") # -> EmbeddingResult
     features = result.to_features()        # -> Features for detectors
 

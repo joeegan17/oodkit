@@ -79,7 +79,7 @@ class KNN(BaseDetector):
                 f"k ({self.k}) cannot exceed number of training samples ({train_embeddings.shape[0]})"
             )
 
-        self.train_embeddings_ = train_embeddings.astype(np.float64, copy=False)
+        self.train_embeddings_ = train_embeddings.astype(np.float32, copy=False)
         self.n_features_in_ = train_embeddings.shape[1]
         self.backend_ = self._resolve_backend()
 

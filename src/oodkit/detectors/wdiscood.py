@@ -180,13 +180,23 @@ class WDiscOOD(BaseDetector):
         i_minus_p: np.ndarray,
         class_means: np.ndarray,
         global_mean: np.ndarray,
+        _chunk_size: int = 512,
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """Per-sample WD (min class L2) and WDR (L2 to origin) on centered features."""
+        """Per-sample WD (min class L2) and WDR (L2 to origin) on centered features.
+
+        Processes samples in chunks to avoid allocating a full
+        ``(N, C, k)`` tensor (which is tens of GiB for ImageNet-scale C).
+        """
+        n = x.shape[0]
         xc = x - global_mean
-        z_wd = xc @ v_wd
         centroids_wd = (class_means - global_mean) @ v_wd
-        diff = z_wd[:, None, :] - centroids_wd[None, :, :]
-        d_wd = np.linalg.norm(diff, axis=2).min(axis=1)
+
+        d_wd = np.empty(n, dtype=np.float64)
+        for start in range(0, n, _chunk_size):
+            end = min(start + _chunk_size, n)
+            z_chunk = xc[start:end] @ v_wd
+            diff = z_chunk[:, None, :] - centroids_wd[None, :, :]
+            d_wd[start:end] = np.linalg.norm(diff, axis=2).min(axis=1)
 
         z_wdr = xc @ i_minus_p
         d_wdr = np.linalg.norm(z_wdr, axis=1)

@@ -26,21 +26,19 @@ def _run_epoch(
     optimizer: torch.optim.Optimizer,
     loss_fn: nn.Module,
     device: torch.device,
-    epoch_idx: int,
-    total_epochs: int,
 ) -> float:
-    """Single training epoch; returns mean loss."""
+    """Single training epoch; returns mean loss.
+
+    No per-batch progress bar: nested ``tqdm`` + ``set_postfix`` every step spams
+    one line per batch in Jupyter and many non-TTY logs. Use the outer epoch bar
+    for ``avg_loss`` (mean over the epoch).
+    """
     backbone.train()
     head.train()
     running_loss = 0.0
     n_batches = 0
 
-    batch_bar = tqdm(
-        dataloader,
-        desc=f"  epoch {epoch_idx + 1}/{total_epochs}",
-        leave=False,
-    )
-    for batch in batch_bar:
+    for batch in dataloader:
         images, labels = batch[0].to(device), batch[1].to(device)
         with torch.set_grad_enabled(backbone.training and any(p.requires_grad for p in backbone.parameters())):
             features = backbone(images).last_hidden_state[:, 0]  # CLS token
@@ -53,7 +51,6 @@ def _run_epoch(
 
         running_loss += loss.item()
         n_batches += 1
-        batch_bar.set_postfix(loss=f"{loss.item():.4f}")
 
     return running_loss / max(n_batches, 1)
 
@@ -88,10 +85,8 @@ def train_head(
     loss_fn = nn.CrossEntropyLoss()
 
     epoch_bar = tqdm(range(epochs), desc="training (head)")
-    for epoch_idx in epoch_bar:
-        avg_loss = _run_epoch(
-            backbone, head, dataloader, optimizer, loss_fn, device, epoch_idx, epochs
-        )
+    for _ in epoch_bar:
+        avg_loss = _run_epoch(backbone, head, dataloader, optimizer, loss_fn, device)
         epoch_bar.set_postfix(avg_loss=f"{avg_loss:.4f}")
 
     return backbone, head
@@ -128,10 +123,8 @@ def train_full(
     loss_fn = nn.CrossEntropyLoss()
 
     epoch_bar = tqdm(range(epochs), desc="training (full)")
-    for epoch_idx in epoch_bar:
-        avg_loss = _run_epoch(
-            backbone, head, dataloader, optimizer, loss_fn, device, epoch_idx, epochs
-        )
+    for _ in epoch_bar:
+        avg_loss = _run_epoch(backbone, head, dataloader, optimizer, loss_fn, device)
         epoch_bar.set_postfix(avg_loss=f"{avg_loss:.4f}")
 
     return backbone, head

@@ -22,8 +22,10 @@ class ScoreBank:
     populated from a dict at construction. Every evaluation function accepts
     a ``ScoreBank`` — no manual array alignment required.
 
-    All arrays are converted to NumPy on ingest. Scores follow the library
-    convention: **higher = more OOD**.
+    All arrays are converted to NumPy on ingest: detector scores and sample
+    metrics as ``float32``, ``ood_labels`` and ``class_labels`` as ``int32``
+    (half the memory of float64/int64 for large banks). Scores follow the
+    library convention: **higher = more OOD**.
 
     Example::
 
@@ -59,11 +61,11 @@ class ScoreBank:
         self._n_samples: Optional[int] = None
 
         if ood_labels is not None:
-            self._ood_labels = to_numpy(ood_labels).astype(np.int64)
+            self._ood_labels = to_numpy(ood_labels).astype(np.int32, copy=False)
             self._set_n_samples(len(self._ood_labels), "ood_labels")
 
         if class_labels is not None:
-            self._class_labels = to_numpy(class_labels).astype(np.int64)
+            self._class_labels = to_numpy(class_labels).astype(np.int32, copy=False)
             self._set_n_samples(len(self._class_labels), "class_labels")
 
         if scores is not None:
@@ -93,7 +95,7 @@ class ScoreBank:
             ValueError: If ``len(scores)`` does not match the bank's
                 established ``n_samples``.
         """
-        arr = to_numpy(scores).astype(np.float64).ravel()
+        arr = to_numpy(scores).astype(np.float32, copy=False).ravel()
         self._set_n_samples(len(arr), f"scores[{name!r}]")
         self._scores[name] = arr
         return self
@@ -112,7 +114,7 @@ class ScoreBank:
             ValueError: If ``len(values)`` does not match the bank's
                 established ``n_samples``.
         """
-        arr = to_numpy(values).astype(np.float64).ravel()
+        arr = to_numpy(values).astype(np.float32, copy=False).ravel()
         self._set_n_samples(len(arr), f"sample_metrics[{name!r}]")
         self._sample_metrics[name] = arr
         return self

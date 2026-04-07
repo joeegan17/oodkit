@@ -30,7 +30,7 @@ def test_invalid_mode_raises():
             return x
 
     emb = Embedder.__new__(Embedder)
-    emb._backbone_name = "dinov3-small"
+    emb._backbone_name = "dinov2-small"
     emb._device = torch.device("cpu")
     emb._model = _FakeModel()
     emb._processor = None
@@ -45,7 +45,7 @@ def test_mode_none_is_noop():
     """mode='none' returns self without touching model."""
 
     emb = Embedder.__new__(Embedder)
-    emb._backbone_name = "dinov3-small"
+    emb._backbone_name = "dinov2-small"
     emb._device = torch.device("cpu")
     emb._model = torch.nn.Linear(2, 2)
     emb._processor = None

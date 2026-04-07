@@ -108,11 +108,22 @@ class Mahalanobis(BaseDetector):
         self.n_features_in_ = n_features
         return self
 
-    def score(self, features_test: "Features", **kwargs: object) -> ArrayLike:
+    def score(
+        self,
+        features_test: "Features",
+        *,
+        _chunk_size: int = 512,
+        **kwargs: object,
+    ) -> ArrayLike:
         """Minimum squared Mahalanobis distance to any class mean.
+
+        Processes samples in chunks to avoid allocating a full
+        ``(N, C, F)`` tensor (which is tens of GiB for ImageNet-scale C).
 
         Args:
             features_test: ``embeddings`` with feature dim matching ``fit``.
+            _chunk_size: Rows per chunk (default 512). Larger is faster but
+                uses more RAM; peak ≈ ``2 * chunk_size * C * F * 8`` bytes.
             **kwargs: Unused.
 
         Returns:
@@ -135,10 +146,19 @@ class Mahalanobis(BaseDetector):
                 f"expected {self.n_features_in_}, got {embeddings.shape[1]}"
             )
 
-        deltas = embeddings[:, None, :] - self.class_means_[None, :, :]
-        projected = np.einsum("ncf,fg->ncg", deltas, self.inverse_covariance_)
-        squared_distances = np.einsum("ncg,ncg->nc", projected, deltas)
-        return np.min(squared_distances, axis=1)
+        n = embeddings.shape[0]
+        means = self.class_means_
+        inv_cov = self.inverse_covariance_
+
+        results = np.empty(n, dtype=np.float64)
+        for start in range(0, n, _chunk_size):
+            end = min(start + _chunk_size, n)
+            chunk = embeddings[start:end]
+            deltas = chunk[:, None, :] - means[None, :, :]
+            projected = np.einsum("ncf,fg->ncg", deltas, inv_cov)
+            sq_dist = np.einsum("ncg,ncg->nc", projected, deltas)
+            results[start:end] = sq_dist.min(axis=1)
+        return results
 
     def predict(
         self,

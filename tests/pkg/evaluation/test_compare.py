@@ -159,7 +159,8 @@ def test_normalize_standardize_zero_mean_unit_std():
     bank.add("MSP", np.array([1.0, 2.0, 3.0, 4.0, 5.0]))
     norm = normalize_scores(bank, method="standardize")
     s = norm.scores_for("MSP")
-    assert s.mean() == pytest.approx(0.0, abs=1e-10)
+    # ScoreBank stores float32; standardized mean is ~0 within float32 noise (~1e-7)
+    assert s.mean() == pytest.approx(0.0, abs=1e-6)
     assert s.std() == pytest.approx(1.0, abs=1e-6)
 
 

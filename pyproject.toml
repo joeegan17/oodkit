@@ -17,6 +17,7 @@ dev = [
 ]
 
 ml = [
+    "scikit-learn",
     "torch",
     "torchvision",
     "transformers",

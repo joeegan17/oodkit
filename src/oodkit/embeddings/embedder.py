@@ -1,7 +1,7 @@
 """
 High-level ``Embedder`` for extracting image embeddings (and optional logits).
 
-Wraps a pretrained vision backbone (DINOv3 by default) loaded from HuggingFace,
+Wraps a pretrained vision backbone (DINOv2 by default) loaded from HuggingFace,
 with optional classifier-head or full-model finetuning.
 """
 
@@ -41,7 +41,7 @@ def _resolve_device(device: str) -> torch.device:
 class Embedder:
     """Extract embeddings (and optionally logits) from images.
 
-    Default backbone is DINOv3-S via HuggingFace. No training is required for
+    Default backbone is DINOv2-S via HuggingFace. No training is required for
     pure embedding extraction (``mode="none"``); optional ``mode="head"`` or
     ``mode="full"`` trains a classifier so that ``logits`` are available for
     logit-based OOD detectors (MSP, Energy, ViM, etc.).
@@ -52,13 +52,13 @@ class Embedder:
 
     def __init__(
         self,
-        backbone: str = "dinov3-small",
+        backbone: str = "dinov2-small",
         device: str = "auto",
     ) -> None:
         """Initialize with a backbone preset and target device.
 
         Args:
-            backbone: Short alias for a registered backbone (e.g. ``"dinov3-small"``).
+            backbone: Short alias for a registered backbone (e.g. ``"dinov2-small"``).
             device: ``"cpu"``, ``"cuda"``, or ``"auto"`` (CUDA when available).
 
         Raises:
@@ -82,6 +82,8 @@ class Embedder:
         epochs: int = 10,
         batch_size: int = 64,
         num_workers: int = 1,
+        pin_memory: Optional[bool] = None,
+        persistent_workers: bool = False,
         lr: float = 1e-3,
         save: bool = True,
         save_path: str = "oodkit_checkpoint/",
@@ -102,7 +104,11 @@ class Embedder:
             epochs: Training epochs (ignored when ``mode="none"``).
             batch_size: Samples per batch during training.
             num_workers: DataLoader workers.
-            lr: Learning rate for Adam.
+            pin_memory: Passed to ``DataLoader`` (``None`` = on when CUDA).
+            persistent_workers: Passed to ``DataLoader`` when ``num_workers > 0``.
+            lr: Learning rate for Adam. ``1e-3`` is a common default for
+                ``mode="head"`` (frozen backbone); try ``1e-4``–``3e-4`` if
+                training is unstable, or lower values for ``mode="full"``.
             save: Whether to save a checkpoint after training.
             save_path: Directory for the checkpoint.
 
@@ -125,7 +131,14 @@ class Embedder:
 
         self._head = nn.Linear(self._embed_dim, n_classes).to(self._device)
 
-        loader = make_dataloader(ds, batch_size=batch_size, num_workers=num_workers, shuffle=True)
+        loader = make_dataloader(
+            ds,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            shuffle=True,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
+        )
 
         if mode == "head":
             self._model, self._head = train_head(
@@ -160,6 +173,8 @@ class Embedder:
         dataset: Union[str, Path, Dataset],
         batch_size: int = 64,
         num_workers: int = 1,
+        pin_memory: Optional[bool] = None,
+        persistent_workers: bool = False,
         save_to: Optional[Union[str, Path]] = None,
     ) -> EmbeddingResult:
         """Run the backbone (and optional head) over a dataset.
@@ -168,6 +183,8 @@ class Embedder:
             dataset: PyTorch ``Dataset`` or path to images.
             batch_size: Samples per batch.
             num_workers: DataLoader workers.
+            pin_memory: Passed to ``DataLoader`` (``None`` = on when CUDA).
+            persistent_workers: Passed to ``DataLoader`` when ``num_workers > 0``.
             save_to: If set, write arrays to this directory incrementally
                 using memory-mapped files instead of accumulating in RAM.
                 Useful for datasets too large to hold in memory. Use
@@ -179,7 +196,14 @@ class Embedder:
             is set, arrays are memory-mapped (near-zero RAM footprint).
         """
         ds = resolve_dataset(dataset, self._processor)
-        loader = make_dataloader(ds, batch_size=batch_size, num_workers=num_workers, shuffle=False)
+        loader = make_dataloader(
+            ds,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            shuffle=False,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
+        )
 
         self._model.eval()
         if self._head is not None:
@@ -343,7 +367,7 @@ class Embedder:
             ``EmbeddingResult``.
         """
         fit_keys = {"epochs", "lr", "save", "save_path"}
-        shared_keys = {"batch_size", "num_workers"}
+        shared_keys = {"batch_size", "num_workers", "pin_memory", "persistent_workers"}
         extract_keys = {"save_to"}
         fit_kwargs = {k: v for k, v in kwargs.items() if k in fit_keys | shared_keys}
         extract_kwargs = {k: v for k, v in kwargs.items() if k in shared_keys | extract_keys}
