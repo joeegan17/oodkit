@@ -18,7 +18,7 @@ import torch  # noqa: E402
 import torch.nn as nn  # noqa: E402
 from numpy.lib.format import open_memmap  # noqa: E402
 from torch.utils.data import Dataset  # noqa: E402
-from tqdm import tqdm  # noqa: E402
+from tqdm.auto import tqdm  # noqa: E402
 
 from oodkit.embeddings.backbones import load_backbone  # noqa: E402
 from oodkit.embeddings.datasets import make_dataloader, resolve_dataset  # noqa: E402

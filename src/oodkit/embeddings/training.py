@@ -16,7 +16,7 @@ require_ml_deps()
 import torch  # noqa: E402
 import torch.nn as nn  # noqa: E402
 from torch.utils.data import DataLoader  # noqa: E402
-from tqdm import tqdm  # noqa: E402
+from tqdm.auto import tqdm  # noqa: E402
 
 
 def _run_epoch(
@@ -27,18 +27,18 @@ def _run_epoch(
     loss_fn: nn.Module,
     device: torch.device,
 ) -> float:
-    """Single training epoch; returns mean loss.
-
-    No per-batch progress bar: nested ``tqdm`` + ``set_postfix`` every step spams
-    one line per batch in Jupyter and many non-TTY logs. Use the outer epoch bar
-    for ``avg_loss`` (mean over the epoch).
-    """
+    """Single training epoch; returns mean loss."""
     backbone.train()
     head.train()
     running_loss = 0.0
     n_batches = 0
 
-    for batch in dataloader:
+    for batch in tqdm(
+        dataloader,
+        desc="batches",
+        leave=False,
+        mininterval=0.5,
+    ):
         images, labels = batch[0].to(device), batch[1].to(device)
         with torch.set_grad_enabled(backbone.training and any(p.requires_grad for p in backbone.parameters())):
             features = backbone(images).last_hidden_state[:, 0]  # CLS token
