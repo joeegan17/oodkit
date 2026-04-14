@@ -39,6 +39,10 @@ class PCAFusion(BaseDetector):
 
     ``fit`` requires ``features.embeddings``. ``score`` and ``predict`` require
     ``embeddings`` and ``logits``.
+
+    After ``fit``, ``explained_variance_ratio_`` and
+    ``cumulative_explained_variance_ratio_`` describe the PCA working spectrum;
+    see property docstrings.
     """
 
     def __init__(
@@ -199,6 +203,21 @@ class PCAFusion(BaseDetector):
         """Number of principal components retained after ``fit``."""
         self._check_is_fitted()
         return self._state.n_components_fitted_
+
+    @property
+    def explained_variance_ratio_(self) -> np.ndarray:
+        """Per-component share of eigenvalue mass in the working space, descending order.
+
+        Same convention as ``oodkit.detectors.pca.PCA.explained_variance_ratio_``.
+        """
+        self._check_is_fitted()
+        return self._state.explained_variance_ratio_
+
+    @property
+    def cumulative_explained_variance_ratio_(self) -> np.ndarray:
+        """Cumulative sum of ``explained_variance_ratio_``."""
+        self._check_is_fitted()
+        return np.cumsum(self._state.explained_variance_ratio_, dtype=np.float64)
 
     def _check_is_fitted(self) -> None:
         if not hasattr(self, "_state"):

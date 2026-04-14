@@ -36,6 +36,10 @@ class PCA(BaseDetector):
 
     ``fit`` and ``score`` use ``features.embeddings`` only. Higher scores indicate
     more OOD (larger reconstruction error).
+
+    After ``fit``, ``explained_variance_ratio_`` and
+    ``cumulative_explained_variance_ratio_`` summarize the working covariance
+    spectrum (same space as ``pct_variance``); see property docstrings.
     """
 
     def __init__(
@@ -148,6 +152,23 @@ class PCA(BaseDetector):
         """Number of principal components retained after ``fit``."""
         self._check_is_fitted()
         return self._state.n_components_fitted_
+
+    @property
+    def explained_variance_ratio_(self) -> np.ndarray:
+        """Per-component share of eigenvalue mass in the working space, descending order.
+
+        Length is the PCA working dimension (embedding dim for ``linear`` / ``cosine``,
+        ``rff_dim`` for ``rff_cosine``). Sums to 1 when total mass is positive; all
+        zeros if the working covariance has no spread.
+        """
+        self._check_is_fitted()
+        return self._state.explained_variance_ratio_
+
+    @property
+    def cumulative_explained_variance_ratio_(self) -> np.ndarray:
+        """Cumulative sum of ``explained_variance_ratio_`` (variance explained by top ``j`` components)."""
+        self._check_is_fitted()
+        return np.cumsum(self._state.explained_variance_ratio_, dtype=np.float64)
 
     def _check_is_fitted(self) -> None:
         if not hasattr(self, "_state"):

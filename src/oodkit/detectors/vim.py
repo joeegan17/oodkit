@@ -9,35 +9,15 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 from oodkit.detectors.base import BaseDetector
+from oodkit.detectors.pca_common import (
+    explained_variance_ratio_from_evals,
+    select_principal_subspace_dim,
+)
 from oodkit.types import ArrayLike
 from oodkit.utils.array import to_numpy
 
 if TYPE_CHECKING:
     from oodkit.data.features import Features
-
-
-def _select_principal_subspace_dim(
-    evals_desc: np.ndarray,
-    n_features: int,
-    n_components: Optional[int],
-    pct_variance: float,
-) -> int:
-    """Number of leading eigen-directions to discard (explicit count or variance rule)."""
-    if n_components is not None:
-        k = int(n_components)
-        if k < 0 or k >= n_features:
-            raise ValueError(
-                f"n_components must satisfy 0 <= n_components < {n_features}, got {k}"
-            )
-        return k
-    if not (0.0 < pct_variance <= 1.0):
-        raise ValueError("pct_variance must be in (0, 1]")
-    total = float(np.sum(evals_desc))
-    if total <= 0:
-        return 1
-    cum_ratio = np.cumsum(evals_desc) / total
-    k = int(np.searchsorted(cum_ratio, pct_variance, side="left")) + 1
-    return int(max(1, min(k, n_features - 1)))
 
 
 class ViM(BaseDetector):
@@ -48,6 +28,12 @@ class ViM(BaseDetector):
     is how many leading directions are **discarded** before residual norms are taken.
 
     Requires ``features.embeddings`` and ``features.logits`` for ``fit`` and ``score``.
+
+    After ``fit``, ``explained_variance_ratio_`` and
+    ``cumulative_explained_variance_ratio_`` describe the spectrum of the
+    origin-centered embedding covariance. Here ``n_components`` is the number of
+    **leading** directions removed; variance in those directions is
+    ``cumulative_explained_variance_ratio_[k - 1]`` when ``k = n_components_fitted_ >= 1``.
     """
 
     def __init__(
@@ -106,7 +92,8 @@ class ViM(BaseDetector):
         cov = X_centered.T @ X_centered
         evals, _ = np.linalg.eigh(cov)
         evals_desc = evals[::-1]
-        k = _select_principal_subspace_dim(
+        self.explained_variance_ratio_ = explained_variance_ratio_from_evals(evals_desc)
+        k = select_principal_subspace_dim(
             evals_desc,
             n_features,
             self.n_components,
@@ -117,6 +104,12 @@ class ViM(BaseDetector):
         residual_norms = self.compute_residual_norms(X_centered, self.R)
         self.alpha = self.compute_alpha(logits, residual_norms)
         return self
+
+    @property
+    def cumulative_explained_variance_ratio_(self) -> np.ndarray:
+        """Cumulative sum of ``explained_variance_ratio_`` (mass in top ``j`` eigen-directions)."""
+        self._check_is_fitted()
+        return np.cumsum(self.explained_variance_ratio_, dtype=np.float64)
 
     def score(self, features_test: "Features", **kwargs: object) -> ArrayLike:
         """Per-sample virtual-class softmax probability (higher ⇒ more OOD in typical use).
@@ -203,8 +196,12 @@ class ViM(BaseDetector):
         return X - o
 
     def _check_is_fitted(self) -> None:
-        """Require ``R`` and ``alpha`` from ``fit``."""
-        missing = [name for name in ("R", "alpha") if not hasattr(self, name)]
+        """Require ``R``, ``alpha``, and spectrum diagnostics from ``fit``."""
+        missing = [
+            name
+            for name in ("R", "alpha", "explained_variance_ratio_")
+            if not hasattr(self, name)
+        ]
         if missing:
             raise RuntimeError(f"ViM instance is not fitted yet. Missing: {missing}")
 

@@ -50,6 +50,20 @@ def select_principal_subspace_dim(
     return int(max(1, min(k, n_features - 1)))
 
 
+def explained_variance_ratio_from_evals(evals_desc: np.ndarray) -> np.ndarray:
+    """Share of total eigenvalue mass per component in descending eigenvalue order.
+
+    Matches the working covariance spectrum used for ``pct_variance`` in
+    ``fit_pca_subspace``. If the total mass is zero, returns a zero vector of the
+    same length (no spread in the working space).
+    """
+    evals_desc = np.asarray(evals_desc, dtype=np.float64)
+    total = float(np.sum(evals_desc))
+    if total <= 0:
+        return np.zeros(evals_desc.shape[0], dtype=np.float64)
+    return (evals_desc / total).astype(np.float64, copy=False)
+
+
 def row_normalize(X: np.ndarray, eps: float = 1e-12) -> np.ndarray:
     """L2-normalize each row of ``X``."""
     norms = np.linalg.norm(X, axis=1, keepdims=True)
@@ -95,6 +109,7 @@ class PCASubspaceState:
     n_components_fitted_: int
     mean_: np.ndarray
     principal_basis_: np.ndarray
+    explained_variance_ratio_: np.ndarray
     rff_W: Optional[np.ndarray] = None
     rff_b: Optional[np.ndarray] = None
     rff_n_components: int = 0
@@ -149,6 +164,7 @@ def fit_pca_subspace(
     evals, eigvecs = np.linalg.eigh(cov)
     eigvecs = eigvecs[:, ::-1]
     evals_desc = evals[::-1]
+    evr = explained_variance_ratio_from_evals(evals_desc)
 
     k = select_principal_subspace_dim(
         evals_desc,
@@ -166,6 +182,7 @@ def fit_pca_subspace(
             n_components_fitted_=k,
             mean_=mean,
             principal_basis_=V,
+            explained_variance_ratio_=evr,
             rff_W=W,
             rff_b=b,
             rff_n_components=rff_dim,
@@ -177,6 +194,7 @@ def fit_pca_subspace(
         n_components_fitted_=k,
         mean_=mean,
         principal_basis_=V,
+        explained_variance_ratio_=evr,
         rff_W=None,
         rff_b=None,
         rff_n_components=0,

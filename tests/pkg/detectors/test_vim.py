@@ -104,3 +104,26 @@ def test_vim_torch_W_b_and_features(vim_linear_pack):
     )
     assert isinstance(scores, np.ndarray)
     assert scores.shape == (1,)
+
+
+def test_vim_explained_variance_ratio_matches_covariance(vim_linear_pack):
+    p = vim_linear_pack
+    vim = ViM(p.W, p.b, n_components=p.n_components)
+    train = Features(logits=p.logits, embeddings=p.embeddings)
+    vim.fit(train)
+    o = vim.origin
+    Xc = ViM.center_features(p.embeddings, o)
+    cov = Xc.T @ Xc
+    evals, _ = np.linalg.eigh(cov)
+    evals_desc = evals[::-1]
+    expected = evals_desc / evals_desc.sum()
+    np.testing.assert_allclose(vim.explained_variance_ratio_, expected)
+    assert vim.explained_variance_ratio_.shape == (p.n_features,)
+    cum = vim.cumulative_explained_variance_ratio_
+    np.testing.assert_allclose(cum[-1], 1.0)
+    k = vim.n_components_fitted_
+    if k >= 1:
+        np.testing.assert_allclose(
+            cum[k - 1],
+            vim.explained_variance_ratio_[:k].sum(),
+        )

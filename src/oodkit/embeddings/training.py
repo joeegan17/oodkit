@@ -70,7 +70,7 @@ def train_head(
         head: Linear classifier head to train.
         dataloader: Training data yielding ``(images, labels)`` batches.
         epochs: Number of training epochs.
-        lr: Learning rate for Adam.
+        lr: Learning rate for Adam on the classifier head only.
         device: Target device.
 
     Returns:
@@ -99,6 +99,7 @@ def train_full(
     epochs: int,
     lr: float,
     device: torch.device,
+    backbone_lr_ratio: float = 0.1,
 ) -> Tuple[nn.Module, nn.Module]:
     """Finetune backbone and head end-to-end.
 
@@ -107,19 +108,31 @@ def train_full(
         head: Linear classifier head.
         dataloader: Training data yielding ``(images, labels)`` batches.
         epochs: Number of training epochs.
-        lr: Learning rate for Adam.
+        lr: Learning rate for Adam on the **classifier head**.
         device: Target device.
+        backbone_lr_ratio: Positive multiplier applied to ``lr`` for backbone
+            parameters (default ``0.1``). Use ``1.0`` for the same LR as the head.
 
     Returns:
         ``(backbone, head)`` after training.
+
+    Raises:
+        ValueError: If ``backbone_lr_ratio`` is not positive.
     """
+    if backbone_lr_ratio <= 0:
+        raise ValueError(f"backbone_lr_ratio must be positive, got {backbone_lr_ratio}")
+
     for p in backbone.parameters():
         p.requires_grad = True
     backbone.train()
     head.train()
 
-    params = list(backbone.parameters()) + list(head.parameters())
-    optimizer = torch.optim.Adam(params, lr=lr)
+    optimizer = torch.optim.Adam(
+        [
+            {"params": list(backbone.parameters()), "lr": lr * backbone_lr_ratio},
+            {"params": list(head.parameters()), "lr": lr},
+        ],
+    )
     loss_fn = nn.CrossEntropyLoss()
 
     epoch_bar = tqdm(range(epochs), desc="training (full)")

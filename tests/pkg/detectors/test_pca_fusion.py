@@ -118,3 +118,31 @@ def test_pca_fusion_torch():
     )
     assert isinstance(scores, np.ndarray)
     assert scores.shape == (1,)
+
+
+def test_pca_fusion_explained_variance_ratio_linear():
+    train_emb = np.array([[0.0, 0.0], [3.0, 0.0], [1.5, 0.0]], dtype=np.float64)
+    d = PCAFusion(kernel="linear", n_components=1)
+    d.fit(Features(embeddings=train_emb))
+    mean = train_emb.mean(axis=0)
+    Xw = train_emb - mean
+    cov = Xw.T @ Xw
+    evals, _ = np.linalg.eigh(cov)
+    evals_desc = evals[::-1]
+    expected = evals_desc / evals_desc.sum()
+    np.testing.assert_allclose(d.explained_variance_ratio_, expected)
+    evr = d.explained_variance_ratio_
+    cum = d.cumulative_explained_variance_ratio_
+    assert evr.shape == (2,)
+    np.testing.assert_allclose(evr.sum(), 1.0)
+    np.testing.assert_allclose(cum[-1], 1.0)
+    assert np.all(np.diff(cum) >= -1e-12)
+
+
+def test_pca_fusion_explained_variance_ratio_rff_dim():
+    rff_dim = 32
+    X = np.random.default_rng(0).standard_normal((12, 3))
+    d = PCAFusion(kernel="rff_cosine", n_components=1, rff_dim=rff_dim, random_state=0)
+    d.fit(Features(embeddings=X))
+    assert d.explained_variance_ratio_.shape == (rff_dim,)
+    assert d.cumulative_explained_variance_ratio_.shape == (rff_dim,)

@@ -85,6 +85,7 @@ class Embedder:
         pin_memory: Optional[bool] = None,
         persistent_workers: bool = False,
         lr: float = 1e-3,
+        backbone_lr_ratio: float = 0.1,
         save: bool = True,
         save_path: str = "oodkit_checkpoint/",
     ) -> "Embedder":
@@ -106,9 +107,11 @@ class Embedder:
             num_workers: DataLoader workers.
             pin_memory: Passed to ``DataLoader`` (``None`` = on when CUDA).
             persistent_workers: Passed to ``DataLoader`` when ``num_workers > 0``.
-            lr: Learning rate for Adam. ``1e-3`` is a common default for
-                ``mode="head"`` (frozen backbone); try ``1e-4``–``3e-4`` if
-                training is unstable, or lower values for ``mode="full"``.
+            lr: Learning rate for Adam on the **classifier head** (and the same
+                base rate for the backbone in ``mode="full"``, scaled by
+                ``backbone_lr_ratio``).
+            backbone_lr_ratio: Positive multiplier for the backbone LR in ``mode="full"`` relative to ``lr`` (default ``0.1``). Ignored in
+                ``mode="head"``. Use ``1.0`` for the same LR on backbone and head.
             save: Whether to save a checkpoint after training.
             save_path: Directory for the checkpoint.
 
@@ -116,13 +119,19 @@ class Embedder:
             ``self`` for chaining.
 
         Raises:
-            ValueError: If ``mode`` is invalid or the dataset does not contain
+            ValueError: If ``mode`` is invalid, ``backbone_lr_ratio`` is not
+                positive when ``mode="full"``, or the dataset does not contain
                 labels / has fewer than 2 classes.
         """
         if mode not in _VALID_MODES:
             raise ValueError(f"mode must be one of {_VALID_MODES}, got '{mode}'")
         if mode == "none":
             return self
+
+        if mode == "full" and backbone_lr_ratio <= 0:
+            raise ValueError(
+                f"backbone_lr_ratio must be positive for mode='full', got {backbone_lr_ratio}"
+            )
 
         ds = resolve_dataset(dataset, self._processor)
         n_classes = self._infer_n_classes(ds)
@@ -146,7 +155,13 @@ class Embedder:
             )
         else:
             self._model, self._head = train_full(
-                self._model, self._head, loader, epochs, lr, self._device,
+                self._model,
+                self._head,
+                loader,
+                epochs,
+                lr,
+                self._device,
+                backbone_lr_ratio=backbone_lr_ratio,
             )
 
         if save:
@@ -156,6 +171,8 @@ class Embedder:
                 "n_classes": n_classes,
                 "mode": mode,
                 "epochs": epochs,
+                "lr": lr,
+                "backbone_lr_ratio": backbone_lr_ratio,
             }
             save_checkpoint(self._model, self._head, save_path, meta)
 
@@ -360,13 +377,14 @@ class Embedder:
         Args:
             dataset: A labeled PyTorch ``Dataset`` or path (see ``fit``).
             mode: Training mode (see ``fit``).
-            **kwargs: Forwarded to ``fit`` (``epochs``, ``lr``, etc.) and
-                ``extract`` (``batch_size``, ``num_workers``).
+            **kwargs: Forwarded to ``fit`` (``epochs``, ``lr``,
+                ``backbone_lr_ratio``, etc.) and ``extract`` (``batch_size``,
+                ``num_workers``).
 
         Returns:
             ``EmbeddingResult``.
         """
-        fit_keys = {"epochs", "lr", "save", "save_path"}
+        fit_keys = {"epochs", "lr", "backbone_lr_ratio", "save", "save_path"}
         shared_keys = {"batch_size", "num_workers", "pin_memory", "persistent_workers"}
         extract_keys = {"save_to"}
         fit_kwargs = {k: v for k, v in kwargs.items() if k in fit_keys | shared_keys}
