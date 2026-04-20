@@ -2,6 +2,8 @@
 
 Out-of-distribution detection library for computer vision.
 
+Architecture, module relationships, and agent onboarding: [`REPO_GUIDE.md`](REPO_GUIDE.md).
+
 ## Installation
 
 ```bash
