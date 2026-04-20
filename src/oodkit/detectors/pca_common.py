@@ -56,12 +56,18 @@ def explained_variance_ratio_from_evals(evals_desc: np.ndarray) -> np.ndarray:
     Matches the working covariance spectrum used for ``pct_variance`` in
     ``fit_pca_subspace``. If the total mass is zero, returns a zero vector of the
     same length (no spread in the working space).
+
+    Eigenvalues from ``eigh`` can be slightly negative due to floating-point error
+    (especially in RFF / high-dimensional working spaces); those are clipped to
+    zero before normalizing so ratios stay non-negative and sum to one when any
+    positive mass remains.
     """
     evals_desc = np.asarray(evals_desc, dtype=np.float64)
-    total = float(np.sum(evals_desc))
+    evals_nonneg = np.maximum(evals_desc, 0.0)
+    total = float(np.sum(evals_nonneg))
     if total <= 0:
         return np.zeros(evals_desc.shape[0], dtype=np.float64)
-    return (evals_desc / total).astype(np.float64, copy=False)
+    return (evals_nonneg / total).astype(np.float64, copy=False)
 
 
 def row_normalize(X: np.ndarray, eps: float = 1e-12) -> np.ndarray:
