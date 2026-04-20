@@ -59,14 +59,66 @@ def ood_labels_from_blocks(lengths: Sequence[int], flags: Sequence[int]) -> np.n
     return np.concatenate(parts, axis=0)
 
 
+_CHIP_META_KEYS = ("chip_to_image", "boxes")
+
+
 def _merge_metadata(parts: Sequence[EmbeddingResult]) -> Dict:
+    """Merge per-block ``EmbeddingResult.metadata`` dicts.
+
+    - List-valued entries (e.g. ``image_paths``) are concatenated in block order.
+    - ``chip_to_image`` arrays are concatenated with per-block offsets so
+      downstream pooling can treat the combined result as one contiguous chip
+      stream with unique image indices. Offset per block equals the running
+      count of unique images in earlier blocks.
+    - ``boxes`` arrays are vertically concatenated.
+    - For ``chip_to_image`` / ``boxes`` we enforce all-or-none: if any block has
+      the key, every block must.
+    - Other scalar / array entries keep the first block's value (unchanged
+      legacy behavior for non-chip metadata).
+    """
     merged: Dict = {}
     for r in parts:
         for key, val in r.metadata.items():
+            if key in _CHIP_META_KEYS:
+                continue
             if isinstance(val, list):
                 merged.setdefault(key, []).extend(val)
             elif key not in merged:
                 merged[key] = val
+
+    chip_keys_present = [
+        [k in r.metadata for r in parts] for k in _CHIP_META_KEYS
+    ]
+    for k, presence in zip(_CHIP_META_KEYS, chip_keys_present):
+        if any(presence) and not all(presence):
+            raise ValueError(
+                f"All EmbeddingResult objects must either provide metadata "
+                f"{k!r} or omit it; got a mix."
+            )
+
+    if all(k in parts[0].metadata for k in _CHIP_META_KEYS):
+        chip_to_image_parts: List[np.ndarray] = []
+        boxes_parts: List[np.ndarray] = []
+        offset = 0
+        for r in parts:
+            c2i = np.asarray(r.metadata["chip_to_image"], dtype=np.int64).ravel()
+            b = np.asarray(r.metadata["boxes"], dtype=np.float64)
+            if b.ndim != 2 or b.shape[1] != 4:
+                raise ValueError(
+                    f"metadata['boxes'] must have shape (N, 4), got {b.shape}"
+                )
+            if c2i.shape[0] != b.shape[0]:
+                raise ValueError(
+                    "metadata['chip_to_image'] and metadata['boxes'] length mismatch: "
+                    f"{c2i.shape[0]} vs {b.shape[0]}"
+                )
+            chip_to_image_parts.append(c2i + offset)
+            boxes_parts.append(b)
+            if c2i.size > 0:
+                offset += int(c2i.max()) + 1
+        merged["chip_to_image"] = np.concatenate(chip_to_image_parts, axis=0)
+        merged["boxes"] = np.concatenate(boxes_parts, axis=0)
+
     return merged
 
 

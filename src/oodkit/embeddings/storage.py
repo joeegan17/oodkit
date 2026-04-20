@@ -64,6 +64,11 @@ def load_embeddings(
                 [all_paths[i] for i in indices] if indices is not None else all_paths
             )
 
+    if manifest.get("has_chip_to_image"):
+        metadata["chip_to_image"] = _load_array(root / "chip_to_image.npy", indices)
+    if manifest.get("has_boxes"):
+        metadata["boxes"] = _load_array(root / "boxes.npy", indices)
+
     return EmbeddingResult(
         embeddings=embeddings,
         logits=logits,

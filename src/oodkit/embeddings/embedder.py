@@ -257,6 +257,9 @@ class Embedder:
         metadata = {}
         if hasattr(ds, "imgs"):
             metadata["image_paths"] = [p for p, _ in ds.imgs]
+        chip_meta = self._extract_chip_metadata(ds)
+        if chip_meta is not None:
+            metadata.update(chip_meta)
 
         return EmbeddingResult(
             embeddings=embeddings,
@@ -345,12 +348,23 @@ class Embedder:
             with open(save_dir / "image_paths.json", "w") as f:
                 json.dump(paths_list, f)
 
+        chip_meta = self._extract_chip_metadata(ds)
+        if chip_meta is not None:
+            np.save(save_dir / "chip_to_image.npy", chip_meta["chip_to_image"])
+            np.save(save_dir / "boxes.npy", chip_meta["boxes"])
+            metadata["chip_to_image"] = np.load(
+                str(save_dir / "chip_to_image.npy"), mmap_mode="r"
+            )
+            metadata["boxes"] = np.load(str(save_dir / "boxes.npy"), mmap_mode="r")
+
         manifest = {
             "n_samples": n,
             "embed_dim": self._embed_dim,
             "has_logits": has_head,
             "has_labels": has_labels,
             "has_image_paths": bool(metadata.get("image_paths")),
+            "has_chip_to_image": chip_meta is not None,
+            "has_boxes": chip_meta is not None,
         }
         with open(save_dir / "manifest.json", "w") as f:
             json.dump(manifest, f, indent=2)
@@ -441,6 +455,35 @@ class Embedder:
             return isinstance(sample, (list, tuple)) and len(sample) >= 2
         except Exception:
             return False
+
+    @staticmethod
+    def _extract_chip_metadata(ds: Dataset) -> Optional[dict]:
+        """Return chip-level metadata arrays if ``ds`` looks like a ``ChipDataset``.
+
+        Duck-typed: any dataset exposing ``chip_to_image`` and ``boxes`` arrays
+        qualifies. Arrays are copied to the expected dtypes (``int64`` and
+        ``float64``) so downstream code can rely on them.
+
+        Returns:
+            ``{"chip_to_image": np.ndarray, "boxes": np.ndarray}`` or ``None``
+            if the dataset does not provide both attributes.
+        """
+        if not (hasattr(ds, "chip_to_image") and hasattr(ds, "boxes")):
+            return None
+        chip_to_image = np.asarray(ds.chip_to_image, dtype=np.int64).copy()
+        boxes = np.asarray(ds.boxes, dtype=np.float64).copy()
+        if chip_to_image.ndim != 1:
+            raise ValueError(
+                f"chip_to_image must be 1-D, got shape {chip_to_image.shape}"
+            )
+        if boxes.ndim != 2 or boxes.shape[1] != 4:
+            raise ValueError(f"boxes must have shape (N, 4), got {boxes.shape}")
+        if boxes.shape[0] != chip_to_image.shape[0]:
+            raise ValueError(
+                "chip_to_image and boxes length mismatch: "
+                f"{chip_to_image.shape[0]} vs {boxes.shape[0]}"
+            )
+        return {"chip_to_image": chip_to_image, "boxes": boxes}
 
     @staticmethod
     def _infer_n_classes(ds: Dataset) -> int:
