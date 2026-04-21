@@ -56,24 +56,40 @@ def load_embeddings(
 
     metadata: dict = {}
     if manifest.get("has_image_paths"):
-        ip_path = root / "image_paths.json"
-        if ip_path.exists():
-            with open(ip_path) as f:
-                all_paths = json.load(f)
-            metadata["image_paths"] = (
-                [all_paths[i] for i in indices] if indices is not None else all_paths
-            )
+        _load_string_list(root / "image_paths.json", indices, metadata, "image_paths")
 
     if manifest.get("has_chip_to_image"):
         metadata["chip_to_image"] = _load_array(root / "chip_to_image.npy", indices)
     if manifest.get("has_boxes"):
         metadata["boxes"] = _load_array(root / "boxes.npy", indices)
+    if manifest.get("has_object_ids"):
+        _load_string_list(root / "object_ids.json", indices, metadata, "object_ids")
+    if manifest.get("has_groups"):
+        _load_string_list(root / "groups.json", indices, metadata, "group")
+    if manifest.get("has_image_ids"):
+        _load_string_list(root / "image_ids.json", indices, metadata, "image_ids")
 
     return EmbeddingResult(
         embeddings=embeddings,
         logits=logits,
         labels=labels,
         metadata=metadata,
+    )
+
+
+def _load_string_list(
+    path: Path,
+    indices: Optional[np.ndarray],
+    metadata: dict,
+    key: str,
+) -> None:
+    """Read a JSON list from ``path`` into ``metadata[key]``, honoring ``indices``."""
+    if not path.exists():
+        return
+    with open(path) as f:
+        values = json.load(f)
+    metadata[key] = (
+        [values[i] for i in indices] if indices is not None else values
     )
 
 

@@ -356,6 +356,18 @@ class Embedder:
                 str(save_dir / "chip_to_image.npy"), mmap_mode="r"
             )
             metadata["boxes"] = np.load(str(save_dir / "boxes.npy"), mmap_mode="r")
+            if "object_ids" in chip_meta:
+                with open(save_dir / "object_ids.json", "w") as f:
+                    json.dump(chip_meta["object_ids"], f)
+                metadata["object_ids"] = chip_meta["object_ids"]
+            if "group" in chip_meta:
+                with open(save_dir / "groups.json", "w") as f:
+                    json.dump(chip_meta["group"], f)
+                metadata["group"] = chip_meta["group"]
+            if "image_ids" in chip_meta:
+                with open(save_dir / "image_ids.json", "w") as f:
+                    json.dump(chip_meta["image_ids"], f)
+                metadata["image_ids"] = chip_meta["image_ids"]
 
         manifest = {
             "n_samples": n,
@@ -365,6 +377,9 @@ class Embedder:
             "has_image_paths": bool(metadata.get("image_paths")),
             "has_chip_to_image": chip_meta is not None,
             "has_boxes": chip_meta is not None,
+            "has_object_ids": chip_meta is not None and "object_ids" in chip_meta,
+            "has_groups": chip_meta is not None and "group" in chip_meta,
+            "has_image_ids": chip_meta is not None and "image_ids" in chip_meta,
         }
         with open(save_dir / "manifest.json", "w") as f:
             json.dump(manifest, f, indent=2)
@@ -458,15 +473,19 @@ class Embedder:
 
     @staticmethod
     def _extract_chip_metadata(ds: Dataset) -> Optional[dict]:
-        """Return chip-level metadata arrays if ``ds`` looks like a ``ChipDataset``.
+        """Return chip-level metadata if ``ds`` looks like a ``ChipDataset``.
 
         Duck-typed: any dataset exposing ``chip_to_image`` and ``boxes`` arrays
-        qualifies. Arrays are copied to the expected dtypes (``int64`` and
-        ``float64``) so downstream code can rely on them.
+        qualifies. The returned dict always contains ``chip_to_image`` (int64)
+        and ``boxes`` (float64, ``(N, 4)`` xyxy). When the dataset also exposes
+        ``object_ids`` and/or ``groups`` they are forwarded as python ``list``s
+        so the list-merge path in ``concatenate_embedding_results`` handles
+        cross-block concatenation automatically.
 
         Returns:
-            ``{"chip_to_image": np.ndarray, "boxes": np.ndarray}`` or ``None``
-            if the dataset does not provide both attributes.
+            ``None`` when the dataset is not chip-shaped; otherwise a dict with
+            ``chip_to_image``, ``boxes``, and optional ``object_ids`` / ``group``
+            / ``image_ids`` entries.
         """
         if not (hasattr(ds, "chip_to_image") and hasattr(ds, "boxes")):
             return None
@@ -483,7 +502,33 @@ class Embedder:
                 "chip_to_image and boxes length mismatch: "
                 f"{chip_to_image.shape[0]} vs {boxes.shape[0]}"
             )
-        return {"chip_to_image": chip_to_image, "boxes": boxes}
+        out: dict = {"chip_to_image": chip_to_image, "boxes": boxes}
+        n = chip_to_image.shape[0]
+        if getattr(ds, "object_ids", None) is not None:
+            obj_ids = list(ds.object_ids)
+            if len(obj_ids) != n:
+                raise ValueError(
+                    f"object_ids length {len(obj_ids)} does not match "
+                    f"chip_to_image length {n}"
+                )
+            out["object_ids"] = [str(x) for x in obj_ids]
+        if getattr(ds, "groups", None) is not None:
+            groups = list(ds.groups)
+            if len(groups) != n:
+                raise ValueError(
+                    f"groups length {len(groups)} does not match "
+                    f"chip_to_image length {n}"
+                )
+            out["group"] = [str(x) for x in groups]
+        if getattr(ds, "image_ids", None) is not None:
+            image_ids = list(ds.image_ids)
+            if len(image_ids) != n:
+                raise ValueError(
+                    f"image_ids length {len(image_ids)} does not match "
+                    f"chip_to_image length {n}"
+                )
+            out["image_ids"] = [str(x) for x in image_ids]
+        return out
 
     @staticmethod
     def _infer_n_classes(ds: Dataset) -> int:

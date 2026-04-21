@@ -121,3 +121,50 @@ def test_concatenate_embedding_results_chip_metadata_all_or_none():
     r2 = EmbeddingResult(embeddings=np.ones((1, 2), dtype=np.float32))
     with pytest.raises(ValueError, match="chip_to_image"):
         concatenate_embedding_results([r1, r2], [0, 1])
+
+
+def test_concatenate_embedding_results_od_list_metadata():
+    r_id = EmbeddingResult(
+        embeddings=np.zeros((2, 4), dtype=np.float32),
+        metadata={
+            "chip_to_image": np.array([0, 0], dtype=np.int64),
+            "boxes": np.zeros((2, 4), dtype=np.float64),
+            "object_ids": ["a_0", "a_1"],
+            "group": ["id", "id"],
+            "image_ids": ["a", "a"],
+        },
+    )
+    r_ood = EmbeddingResult(
+        embeddings=np.ones((1, 4), dtype=np.float32),
+        metadata={
+            "chip_to_image": np.array([0], dtype=np.int64),
+            "boxes": np.zeros((1, 4), dtype=np.float64),
+            "object_ids": ["b_0"],
+            "group": ["cartoon"],
+            "image_ids": ["b"],
+        },
+    )
+    comb, _ = concatenate_embedding_results([r_id, r_ood], [0, 1])
+    assert comb.metadata["object_ids"] == ["a_0", "a_1", "b_0"]
+    assert comb.metadata["group"] == ["id", "id", "cartoon"]
+    assert comb.metadata["image_ids"] == ["a", "a", "b"]
+
+
+def test_concatenate_embedding_results_od_list_all_or_none():
+    r1 = EmbeddingResult(
+        embeddings=np.zeros((1, 2), dtype=np.float32),
+        metadata={
+            "chip_to_image": np.array([0], dtype=np.int64),
+            "boxes": np.zeros((1, 4), dtype=np.float64),
+            "group": ["cartoon"],
+        },
+    )
+    r2 = EmbeddingResult(
+        embeddings=np.ones((1, 2), dtype=np.float32),
+        metadata={
+            "chip_to_image": np.array([0], dtype=np.int64),
+            "boxes": np.zeros((1, 4), dtype=np.float64),
+        },
+    )
+    with pytest.raises(ValueError, match="'group'"):
+        concatenate_embedding_results([r1, r2], [0, 1])

@@ -205,3 +205,173 @@ def test_make_chip_annotations_without_labels(tmp_path: Path):
     records = [{"image_path": str(img), "boxes": [[0, 0, 10, 10]]}]
     anns = make_chip_annotations(records)
     assert anns[0].labels is None
+
+
+def test_chip_dataset_image_ids_default_to_stem(tmp_path: Path):
+    img_a = tmp_path / "a.png"
+    img_b = tmp_path / "b.png"
+    _save_image(img_a)
+    _save_image(img_b)
+    anns = [
+        ChipImageAnn(image_path=str(img_a), boxes=np.array([[0, 0, 10, 10]])),
+        ChipImageAnn(image_path=str(img_b), boxes=np.array([[0, 0, 10, 10]])),
+    ]
+    ds = ChipDataset(anns, _FakeProcessor())
+    assert list(ds.image_ids) == ["a", "b"]
+    assert ds.groups is None
+
+
+def test_chip_dataset_explicit_image_id_is_respected(tmp_path: Path):
+    img = tmp_path / "00067.jpg"
+    _save_image(img)
+    anns = [
+        ChipImageAnn(
+            image_path=str(img),
+            boxes=np.array([[0, 0, 10, 10]]),
+            image_id="custom-id",
+        )
+    ]
+    ds = ChipDataset(anns, _FakeProcessor())
+    assert list(ds.image_ids) == ["custom-id"]
+
+
+def test_chip_dataset_groups_propagate(tmp_path: Path):
+    img_a = tmp_path / "a.png"
+    img_b = tmp_path / "b.png"
+    _save_image(img_a)
+    _save_image(img_b)
+    anns = [
+        ChipImageAnn(
+            image_path=str(img_a),
+            boxes=np.array([[0, 0, 10, 10], [5, 5, 20, 20]]),
+            group="cartoon",
+        ),
+        ChipImageAnn(
+            image_path=str(img_b),
+            boxes=np.array([[0, 0, 10, 10]]),
+            group="tattoo",
+        ),
+    ]
+    ds = ChipDataset(anns, _FakeProcessor())
+    assert ds.groups is not None
+    assert list(ds.groups) == ["cartoon", "cartoon", "tattoo"]
+
+
+def test_chip_dataset_rejects_mixed_group_presence(tmp_path: Path):
+    img = tmp_path / "a.png"
+    _save_image(img)
+    anns = [
+        ChipImageAnn(image_path=str(img), boxes=np.zeros((1, 4)), group="cartoon"),
+        ChipImageAnn(image_path=str(img), boxes=np.zeros((1, 4))),
+    ]
+    with pytest.raises(ValueError, match="group"):
+        ChipDataset(anns, _FakeProcessor())
+
+
+def test_chip_dataset_object_ids_unlabeled(tmp_path: Path):
+    img = tmp_path / "00067.jpg"
+    _save_image(img)
+    anns = [
+        ChipImageAnn(
+            image_path=str(img),
+            boxes=np.array([[0, 0, 10, 10], [5, 5, 15, 15]]),
+        )
+    ]
+    ds = ChipDataset(anns, _FakeProcessor())
+    assert list(ds.object_ids) == ["00067_0", "00067_1"]
+
+
+def test_chip_dataset_object_ids_labeled_with_class_names(tmp_path: Path):
+    img = tmp_path / "00067.jpg"
+    _save_image(img)
+    anns = [
+        ChipImageAnn(
+            image_path=str(img),
+            boxes=np.array(
+                [[0, 0, 10, 10], [5, 5, 15, 15], [20, 20, 30, 30]]
+            ),
+            labels=np.array([0, 0, 1]),
+        )
+    ]
+    ds = ChipDataset(
+        anns,
+        _FakeProcessor(),
+        class_names=["cat", "dog"],
+    )
+    assert list(ds.object_ids) == [
+        "00067_cat_0",
+        "00067_cat_1",
+        "00067_dog_0",
+    ]
+
+
+def test_chip_dataset_object_ids_with_group_and_class(tmp_path: Path):
+    img = tmp_path / "00067.jpg"
+    _save_image(img)
+    anns = [
+        ChipImageAnn(
+            image_path=str(img),
+            boxes=np.array([[0, 0, 10, 10], [5, 5, 15, 15]]),
+            labels=np.array([0, 0]),
+            group="cartoon",
+        )
+    ]
+    ds = ChipDataset(anns, _FakeProcessor(), class_names=["cat"])
+    assert list(ds.object_ids) == [
+        "00067_cat_cartoon_0",
+        "00067_cat_cartoon_1",
+    ]
+
+
+def test_chip_dataset_object_ids_without_class_names_stringifies_label(tmp_path: Path):
+    img = tmp_path / "00067.jpg"
+    _save_image(img)
+    anns = [
+        ChipImageAnn(
+            image_path=str(img),
+            boxes=np.array([[0, 0, 10, 10]]),
+            labels=np.array([7]),
+        )
+    ]
+    ds = ChipDataset(anns, _FakeProcessor())
+    assert list(ds.object_ids) == ["00067_7_0"]
+
+
+def test_chip_dataset_object_ids_counter_is_per_image(tmp_path: Path):
+    img_a = tmp_path / "00001.jpg"
+    img_b = tmp_path / "00002.jpg"
+    _save_image(img_a)
+    _save_image(img_b)
+    anns = [
+        ChipImageAnn(
+            image_path=str(img_a),
+            boxes=np.array([[0, 0, 10, 10]]),
+            labels=np.array([0]),
+        ),
+        ChipImageAnn(
+            image_path=str(img_b),
+            boxes=np.array([[0, 0, 10, 10]]),
+            labels=np.array([0]),
+        ),
+    ]
+    ds = ChipDataset(anns, _FakeProcessor(), class_names=["cat"])
+    assert list(ds.object_ids) == ["00001_cat_0", "00002_cat_0"]
+
+
+def test_chip_dataset_sample_descriptor_includes_group_and_object_id(tmp_path: Path):
+    img = tmp_path / "00067.jpg"
+    _save_image(img)
+    anns = [
+        ChipImageAnn(
+            image_path=str(img),
+            boxes=np.array([[0, 0, 10, 10]]),
+            labels=np.array([0]),
+            group="cartoon",
+        )
+    ]
+    ds = ChipDataset(anns, _FakeProcessor(), class_names=["cat"])
+    d = ds.sample_descriptor(0)
+    assert d["image_id"] == "00067"
+    assert d["object_id"] == "00067_cat_cartoon_0"
+    assert d["group"] == "cartoon"
+    assert d["class_name"] == "cat"

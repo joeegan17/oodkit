@@ -60,6 +60,7 @@ def ood_labels_from_blocks(lengths: Sequence[int], flags: Sequence[int]) -> np.n
 
 
 _CHIP_META_KEYS = ("chip_to_image", "boxes")
+_CHIP_LIST_META_KEYS = ("object_ids", "group", "image_ids")
 
 
 def _merge_metadata(parts: Sequence[EmbeddingResult]) -> Dict:
@@ -71,6 +72,9 @@ def _merge_metadata(parts: Sequence[EmbeddingResult]) -> Dict:
       stream with unique image indices. Offset per block equals the running
       count of unique images in earlier blocks.
     - ``boxes`` arrays are vertically concatenated.
+    - OD list metadata (``object_ids``, ``group``, ``image_ids``) is enforced
+      all-or-none across blocks so per-chip lookups always align with the
+      concatenated embeddings.
     - For ``chip_to_image`` / ``boxes`` we enforce all-or-none: if any block has
       the key, every block must.
     - Other scalar / array entries keep the first block's value (unchanged
@@ -90,6 +94,14 @@ def _merge_metadata(parts: Sequence[EmbeddingResult]) -> Dict:
         [k in r.metadata for r in parts] for k in _CHIP_META_KEYS
     ]
     for k, presence in zip(_CHIP_META_KEYS, chip_keys_present):
+        if any(presence) and not all(presence):
+            raise ValueError(
+                f"All EmbeddingResult objects must either provide metadata "
+                f"{k!r} or omit it; got a mix."
+            )
+
+    for k in _CHIP_LIST_META_KEYS:
+        presence = [k in r.metadata for r in parts]
         if any(presence) and not all(presence):
             raise ValueError(
                 f"All EmbeddingResult objects must either provide metadata "

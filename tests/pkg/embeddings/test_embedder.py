@@ -213,3 +213,28 @@ def test_extract_chip_metadata_rejects_bad_boxes_shape():
     )
     with pytest.raises(ValueError, match="boxes"):
         Embedder._extract_chip_metadata(ds)
+
+
+def test_extract_chip_metadata_forwards_optional_lists():
+    ds = SimpleNamespace(
+        chip_to_image=np.array([0, 0, 1], dtype=np.int64),
+        boxes=np.zeros((3, 4), dtype=np.float64),
+        object_ids=np.array(["a_0", "a_1", "b_0"], dtype=object),
+        groups=["cartoon", "cartoon", "tattoo"],
+        image_ids=["a", "a", "b"],
+    )
+    out = Embedder._extract_chip_metadata(ds)
+    assert out is not None
+    assert out["object_ids"] == ["a_0", "a_1", "b_0"]
+    assert out["group"] == ["cartoon", "cartoon", "tattoo"]
+    assert out["image_ids"] == ["a", "a", "b"]
+
+
+def test_extract_chip_metadata_rejects_mismatched_group_length():
+    ds = SimpleNamespace(
+        chip_to_image=np.array([0, 1], dtype=np.int64),
+        boxes=np.zeros((2, 4), dtype=np.float64),
+        groups=["cartoon"],
+    )
+    with pytest.raises(ValueError, match="groups"):
+        Embedder._extract_chip_metadata(ds)
