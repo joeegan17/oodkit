@@ -6,7 +6,7 @@ accepts the bank directly. The user never has to worry about aligning arrays,
 matching lengths, or remembering which scores came from which detector.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
@@ -43,6 +43,12 @@ class ScoreBank:
         class_labels: Per-sample class indices ``(n_samples,)`` (predicted or
             ground-truth — caller's choice). Required for ``by_class`` and
             ``evaluate_by_class``.
+        class_names: Optional list mapping integer class label → human-readable
+            name (e.g. COCO category names). Used by visualization helpers that
+            accept ``class_name=<str>`` filters instead of integer labels.
+        groups: Optional per-sample string tags, shape ``(n_samples,)`` (e.g.
+            OOD domain names like ``"cartoon"`` / ``"tattoo"``, confidence
+            buckets, or dataset-source tags). Required for ``by_group``.
         sample_metrics: Optional dict mapping metric name to per-sample float
             array ``(n_samples,)``, e.g. per-sample accuracy or IoU.
     """
@@ -52,11 +58,17 @@ class ScoreBank:
         scores: Optional[Dict[str, ArrayLike]] = None,
         ood_labels: Optional[ArrayLike] = None,
         class_labels: Optional[ArrayLike] = None,
+        class_names: Optional[Sequence[str]] = None,
+        groups: Optional[ArrayLike] = None,
         sample_metrics: Optional[Dict[str, ArrayLike]] = None,
     ) -> None:
         self._scores: Dict[str, np.ndarray] = {}
         self._ood_labels: Optional[np.ndarray] = None
         self._class_labels: Optional[np.ndarray] = None
+        self._class_names: Optional[List[str]] = (
+            list(class_names) if class_names is not None else None
+        )
+        self._groups: Optional[np.ndarray] = None
         self._sample_metrics: Dict[str, np.ndarray] = {}
         self._n_samples: Optional[int] = None
 
@@ -67,6 +79,10 @@ class ScoreBank:
         if class_labels is not None:
             self._class_labels = to_numpy(class_labels).astype(np.int32, copy=False)
             self._set_n_samples(len(self._class_labels), "class_labels")
+
+        if groups is not None:
+            self._groups = np.asarray(groups, dtype=object).reshape(-1)
+            self._set_n_samples(len(self._groups), "groups")
 
         if scores is not None:
             for name, arr in scores.items():
@@ -150,6 +166,16 @@ class ScoreBank:
         return self._class_labels is not None
 
     @property
+    def has_class_names(self) -> bool:
+        """``True`` when the int-label → name mapping is available."""
+        return self._class_names is not None
+
+    @property
+    def has_groups(self) -> bool:
+        """``True`` when per-sample group tags are present."""
+        return self._groups is not None
+
+    @property
     def ood_labels(self) -> Optional[np.ndarray]:
         """OOD labels array, shape ``(n_samples,)``, or ``None``."""
         return self._ood_labels
@@ -160,11 +186,28 @@ class ScoreBank:
         return self._class_labels
 
     @property
+    def class_names(self) -> Optional[List[str]]:
+        """Optional mapping from integer class label → name (list), or ``None``."""
+        return list(self._class_names) if self._class_names is not None else None
+
+    @property
+    def groups(self) -> Optional[np.ndarray]:
+        """Per-sample group tags, shape ``(n_samples,)`` ``object`` array, or ``None``."""
+        return self._groups
+
+    @property
     def classes(self) -> Optional[np.ndarray]:
         """Sorted unique class values, or ``None`` if no class labels."""
         if self._class_labels is None:
             return None
         return np.unique(self._class_labels)
+
+    @property
+    def unique_groups(self) -> Optional[np.ndarray]:
+        """Sorted unique group tags, or ``None`` if no groups."""
+        if self._groups is None:
+            return None
+        return np.unique(self._groups)
 
     @property
     def metric_names(self) -> List[str]:
@@ -220,23 +263,61 @@ class ScoreBank:
     def by_class(self, class_label: int) -> "ScoreBank":
         """Return a new ``ScoreBank`` restricted to one class.
 
+        Accepts either the integer class label or, when ``class_names`` is set,
+        the class name string.
+
         Args:
-            class_label: The class value to select (must be present in
-                ``class_labels``).
+            class_label: The class value to select (integer or, with
+                ``class_names``, a name).
 
         Returns:
             A new ``ScoreBank`` containing only samples where
             ``class_labels == class_label``.
 
         Raises:
-            ValueError: If no class labels are in the bank.
+            ValueError: If no class labels are in the bank, or if a name is
+                passed without ``class_names`` set.
+            KeyError: If a class name is passed that isn't in ``class_names``.
         """
         if self._class_labels is None:
             raise ValueError(
                 "Cannot slice by class: ScoreBank has no class_labels. "
                 "Pass class_labels at construction or add them before slicing."
             )
-        mask = self._class_labels == class_label
+        if isinstance(class_label, str):
+            if self._class_names is None:
+                raise ValueError(
+                    "Cannot slice by class name: ScoreBank has no class_names. "
+                    "Pass class_names at construction."
+                )
+            if class_label not in self._class_names:
+                raise KeyError(
+                    f"class name {class_label!r} not in class_names; "
+                    f"available: {list(self._class_names)}"
+                )
+            class_label = self._class_names.index(class_label)
+        mask = self._class_labels == int(class_label)
+        return self.subset(np.where(mask)[0])
+
+    def by_group(self, group: str) -> "ScoreBank":
+        """Return a new ``ScoreBank`` restricted to one group tag.
+
+        Args:
+            group: The group value to select (must be present in ``groups``).
+
+        Returns:
+            A new ``ScoreBank`` containing only samples where
+            ``groups == group``.
+
+        Raises:
+            ValueError: If no groups are in the bank.
+        """
+        if self._groups is None:
+            raise ValueError(
+                "Cannot slice by group: ScoreBank has no groups. "
+                "Pass groups at construction."
+            )
+        mask = self._groups == group
         return self.subset(np.where(mask)[0])
 
     def subset(self, indices: ArrayLike) -> "ScoreBank":
@@ -246,19 +327,23 @@ class ScoreBank:
             indices: Integer index array; may be any array-like.
 
         Returns:
-            A new ``ScoreBank`` with all arrays sliced to ``indices``.
+            A new ``ScoreBank`` with all arrays sliced to ``indices``. Optional
+            metadata (``class_names``, ``groups``) is carried forward.
         """
         idx = to_numpy(indices).astype(np.intp)
 
         sliced_scores = {name: arr[idx] for name, arr in self._scores.items()}
         sliced_ood = self._ood_labels[idx] if self._ood_labels is not None else None
         sliced_cls = self._class_labels[idx] if self._class_labels is not None else None
+        sliced_groups = self._groups[idx] if self._groups is not None else None
         sliced_metrics = {name: arr[idx] for name, arr in self._sample_metrics.items()}
 
         return ScoreBank(
             scores=sliced_scores,
             ood_labels=sliced_ood,
             class_labels=sliced_cls,
+            class_names=self._class_names,
+            groups=sliced_groups,
             sample_metrics=sliced_metrics if sliced_metrics else None,
         )
 
@@ -289,6 +374,10 @@ class ScoreBank:
             parts.append("ood_labels=True")
         if self.has_class_labels:
             parts.append(f"classes={list(self.classes)}")
+        if self.has_groups:
+            unique = self.unique_groups
+            assert unique is not None
+            parts.append(f"groups={list(unique)}")
         if self._sample_metrics:
             parts.append(f"metrics={self.metric_names}")
         return ", ".join(parts) + ")"

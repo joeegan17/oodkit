@@ -54,7 +54,9 @@ Supporting pieces: **`backbones`** (HF presets), **`datasets`** / dataloaders, *
 
 ### 4. `oodkit.evaluation` — metrics and comparisons
 
-**`ScoreBank`** is the hub: register multiple detector score vectors (and optional `ood_labels`, `class_labels`, per-sample metrics). **`evaluate`**, **`evaluate_by_class`**, low-level **`roc_curve`** / **`auroc`**, **`compare`** helpers, **`performance`**, and **`plots`** all consume a bank so callers do not manually align arrays.
+**`ScoreBank`** is the hub: register multiple detector score vectors plus optional sample-aligned metadata — `ood_labels`, `class_labels`, `class_names` (int-label → name), `groups` (per-sample string tags, e.g. OOD domain names), and arbitrary `sample_metrics`. **`evaluate`**, **`evaluate_by_class`**, low-level **`roc_curve`** / **`auroc`**, **`compare`** helpers (`rank_samples` supports `rank_range`), **`performance`**, and **`plots`** all consume a bank so callers do not manually align arrays. **`by_class(name_or_int)`** and **`by_group(name)`** return sliced banks.
+
+**Visualization:** **`plots.score_distributions(kind="hist"|"kde", standardize=...)`** overlays ID vs OOD score distributions per detector, optionally z-scored against the ID pool so axes are comparable across detectors. **`plots.rank_grid(bank, detector, images=..., rank_range=..., class_name=..., group=..., truth=...)`** renders a ranked sample grid with filters; `images` can be a list of PILs/paths or any `__getitem__`-indexable loader (the COCO notebook plugs in an on-the-fly chip cropper in three lines).
 
 **`combine`** provides **`concatenate_embedding_results`** and helpers to build **`ood_labels`** vectors when ID and OOD runs are separate blocks. It also merges OD metadata (`chip_to_image` with per-block offsets, `boxes`, `object_ids`, `group`, `image_ids`) so chip-level analysis survives multi-block concatenation.
 

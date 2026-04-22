@@ -66,6 +66,26 @@ def test_rank_samples_invalid_direction():
         rank_samples(bank, "MSP", direction="sideways")
 
 
+def test_rank_samples_rank_range_slice(two_detector_bank):
+    # det_a is ascending → descending OOD order is [5, 4, 3, 2, 1, 0].
+    idx = rank_samples(
+        two_detector_bank, "det_a", direction="ood", rank_range=(1, 4),
+    )
+    np.testing.assert_array_equal(idx, [4, 3, 2])
+
+
+def test_rank_samples_rank_range_clamps_and_rejects_empty(two_detector_bank):
+    idx = rank_samples(
+        two_detector_bank, "det_a", direction="ood", rank_range=(4, 100),
+    )
+    np.testing.assert_array_equal(idx, [1, 0])
+
+    with pytest.raises(ValueError, match="empty rank_range"):
+        rank_samples(
+            two_detector_bank, "det_a", direction="ood", rank_range=(10, 20),
+        )
+
+
 # ------------------------------------------------------------------
 # disagreements
 # ------------------------------------------------------------------

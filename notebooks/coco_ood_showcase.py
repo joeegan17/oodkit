@@ -291,7 +291,17 @@ del id_train_feat, y_train, train_res, W, b
 # %%
 chip_scores = {name: det.score(comb_feat) for name, det in detectors.items()}
 
-chip_bank = ScoreBank(ood_labels=ood_labels)
+class_labels = np.asarray(combined.labels, dtype=np.int64)
+class_names: list[str] = category_table.names()
+n_classes = len(class_names)
+group_per_chip = np.asarray(combined.metadata["group"])
+
+chip_bank = ScoreBank(
+    ood_labels=ood_labels,
+    class_labels=class_labels,
+    class_names=class_names,
+    groups=group_per_chip,
+)
 for name, s in chip_scores.items():
     chip_bank.add(name, s)
 
@@ -334,8 +344,6 @@ for method in ("mean", "max", "topk_mean"):
 # since it empirically tracks scene-level OOD better than plain mean.
 
 # %%
-group_per_chip = np.asarray(combined.metadata["group"])
-
 # Build per-image group: all chips from the same image share the same group, so
 # an arbitrary "last write wins" indexed assignment recovers it safely.
 image_group = np.empty(n_images, dtype=object)
@@ -376,10 +384,6 @@ for domain in OOD_DOMAINS:
 # %%
 import pandas as pd
 from oodkit.evaluation.metrics import auroc
-
-class_labels = np.asarray(combined.labels, dtype=np.int64)
-class_names: list[str] = category_table.names()
-n_classes = len(class_names)
 
 # Pick a handful of frequent classes in the ID val split so the table is populated.
 id_mask = group_per_chip == "coco_val"
@@ -663,146 +667,38 @@ for name in ("Energy", "WDiscOOD", "ViM"):
 # ## Visual inspection: top / bottom chips by detector score
 #
 # Numerical AUROC only goes so far — eyeballing the chips with the highest (or lowest) OOD
-# scores often reveals whether a detector is picking up on what we expect. The helper below
-# pulls chips by detector score with optional class / group filters; each title shows the
-# true ID/OOD label, class, domain, and score.
+# scores often reveals whether a detector is picking up on what we expect. We use the
+# library helper `oodkit.evaluation.plots.rank_grid` with the enriched `chip_bank` (which
+# already carries `class_labels`, `class_names`, `groups`, and `ood_labels`), plus a small
+# chip-cropping loader so `rank_grid` can render thumbnails on the fly.
 #
-# `rank_range` is a `(start, end)` slice into the sorted ranking, so you can browse past the
-# very top results (e.g. `rank_range=(16, 24)`). Direction `"descending"` returns highest
-# scores (most OOD) first; `"ascending"` returns the lowest.
-#
-# These helpers live in the notebook for now — they are tightly coupled to chip metadata and
-# image loading. If they prove broadly useful we can lift them into `oodkit.evaluation`
-# (tracked in `ROADMAP.md`).
+# The library takes care of filtering and ranking; we just pass `class_name`, `group`,
+# `truth` (``"id"`` / ``"ood"``), and a `rank_range` (``(start, end)``).
 
 # %%
 from PIL import Image
 
 from oodkit.data.chips import crop_chip
+from oodkit.evaluation.plots import rank_grid
 
 combined_image_paths: list[str] = list(combined.metadata["image_paths"])
 combined_boxes = np.asarray(combined.metadata["boxes"], dtype=np.float64)
 
 
-def display_chips(
-    detector: str,
-    *,
-    rank_range: tuple[int, int] = (0, 8),
-    direction: str = "descending",
-    group: str | None = None,
-    class_name: str | None = None,
-    truth: str | None = None,
-    ncols: int | None = None,
-    figsize_per_cell: tuple[float, float] = (3.0, 3.3),
-    min_chip_size: int = MIN_CHIP_SIZE,
-):
-    """Grid of chip crops ranked by a detector's OOD score.
+class ChipImageLoader:
+    """Sample-aligned on-demand chip cropper for ``rank_grid(images=...)``."""
 
-    Args:
-        detector: Key into ``chip_scores`` (e.g. ``"ViM"``).
-        rank_range: ``(start, end)`` slice into the sorted ranking. ``(0, 8)`` shows
-            the top 8; ``(16, 24)`` shows the 17th through 24th.
-        direction: ``"descending"`` for highest-score-first (most OOD),
-            ``"ascending"`` for lowest-score-first (most ID-like).
-        group: Restrict to chips whose ``metadata["group"]`` equals this (e.g.
-            ``"cartoon"``, ``"coco_val"``). ``None`` = no group filter.
-        class_name: Restrict to chips of a single class (by name, e.g. ``"cat"``).
-            ``None`` = no class filter.
-        truth: Restrict by ground-truth label — ``"id"`` for in-distribution only,
-            ``"ood"`` for out-of-distribution only, ``None`` (default) for both.
-        ncols: Override grid width. Defaults to ``min(len, 4)``.
-        figsize_per_cell: Per-cell figure size hint.
-        min_chip_size: Minimum chip side when cropping (matches dataset default).
+    def __init__(self, paths, boxes, *, min_chip_size: int = MIN_CHIP_SIZE):
+        self._paths = paths
+        self._boxes = boxes
+        self._min_chip_size = min_chip_size
 
-    Returns:
-        The matplotlib ``Figure``.
-    """
-    if direction not in ("ascending", "descending"):
-        raise ValueError(f"direction must be 'ascending' or 'descending', got {direction!r}")
-    if truth is not None and truth not in ("id", "ood"):
-        raise ValueError(f"truth must be 'id', 'ood', or None, got {truth!r}")
-    if detector not in chip_scores:
-        raise KeyError(f"detector {detector!r} not in chip_scores {list(chip_scores)}")
+    def __getitem__(self, idx: int):
+        image_np = np.asarray(Image.open(self._paths[idx]).convert("RGB"))
+        return crop_chip(image_np, self._boxes[idx], min_chip_size=self._min_chip_size)
 
-    mask = np.ones(len(class_labels), dtype=bool)
-    if group is not None:
-        mask &= (group_per_chip == group)
-    if class_name is not None:
-        if class_name not in class_names:
-            raise ValueError(f"unknown class {class_name!r}")
-        cls_int = class_names.index(class_name)
-        mask &= (class_labels == cls_int)
-    if truth == "id":
-        mask &= (ood_labels == 0)
-    elif truth == "ood":
-        mask &= (ood_labels == 1)
 
-    pool_idx = np.nonzero(mask)[0]
-    if pool_idx.size == 0:
-        raise ValueError(
-            f"no chips match (group={group!r}, class_name={class_name!r}, truth={truth!r})"
-        )
-
-    scores = chip_scores[detector]
-    pool_scores = scores[pool_idx]
-    order = np.argsort(-pool_scores if direction == "descending" else pool_scores, kind="stable")
-    sorted_idx = pool_idx[order]
-
-    start, end = rank_range
-    start = max(0, int(start))
-    end = min(int(end), sorted_idx.size)
-    if start >= end:
-        raise ValueError(
-            f"empty rank_range={rank_range} for pool of size {sorted_idx.size}"
-        )
-    chosen = sorted_idx[start:end]
-
-    n = chosen.size
-    ncols = ncols or min(n, 4)
-    nrows = (n + ncols - 1) // ncols
-    fig, axes = plt.subplots(
-        nrows, ncols,
-        figsize=(figsize_per_cell[0] * ncols, figsize_per_cell[1] * nrows),
-        squeeze=False,
-    )
-    flat = axes.ravel()
-
-    for slot, chip_idx in enumerate(chosen):
-        ax = flat[slot]
-        path = combined_image_paths[chip_idx]
-        box = combined_boxes[chip_idx]
-        image_np = np.asarray(Image.open(path).convert("RGB"))
-        chip = crop_chip(image_np, box, min_chip_size=min_chip_size)
-        ax.imshow(chip)
-        ax.axis("off")
-        cls = class_names[int(class_labels[chip_idx])]
-        grp = str(group_per_chip[chip_idx])
-        truth = "OOD" if int(ood_labels[chip_idx]) == 1 else "ID"
-        score = scores[chip_idx]
-        ax.set_title(
-            f"{cls} | {grp} | {truth}\nscore={score:.3f} (rank {start + slot + 1})",
-            fontsize=9,
-        )
-
-    for j in range(n, nrows * ncols):
-        flat[j].set_visible(False)
-
-    sort_word = "highest" if direction == "descending" else "lowest"
-    filt = []
-    if class_name is not None:
-        filt.append(f"class={class_name}")
-    if group is not None:
-        filt.append(f"group={group}")
-    if truth is not None:
-        filt.append(f"truth={truth}")
-    filt_str = f"  [{', '.join(filt)}]" if filt else ""
-    fig.suptitle(
-        f"{detector}: chips ranked {sort_word} score"
-        f"  ranks {start + 1}-{end}{filt_str}",
-        fontsize=11,
-    )
-    fig.tight_layout()
-    return fig
+chip_images = ChipImageLoader(combined_image_paths, combined_boxes)
 
 
 # %% [markdown]
@@ -813,7 +709,11 @@ def display_chips(
 # drawings rather than photos that happened to be mislabeled.
 
 # %%
-display_chips("Energy", group="cartoon", class_name="cat", rank_range=(0, 8), direction="descending")
+rank_grid(
+    chip_bank, "Energy", images=chip_images,
+    rank_range=(0, 8), direction="ood",
+    class_name="cat", group="cartoon",
+)
 plt.show()
 
 # %% [markdown]
@@ -823,18 +723,25 @@ plt.show()
 # the entire combined stream — handy for catching labeling noise or surprising ID outliers.
 
 # %%
-display_chips("WDiscOOD", rank_range=(0, 8), direction="descending")
+rank_grid(
+    chip_bank, "WDiscOOD", images=chip_images,
+    rank_range=(0, 8), direction="ood",
+)
 plt.show()
 
 # %% [markdown]
 # ### ViM: weather "person" — most ID-like chips
 #
-# Flipping direction to `"ascending"` surfaces OOD chips the detector **failed** to flag
+# Flipping direction to `"id"` surfaces OOD chips the detector **failed** to flag
 # (low scores). For ViM on weather-person, these are OOD chips the model thinks look most
 # like a normal COCO person — often the hardest failure cases to debug.
 
 # %%
-display_chips("ViM", group="weather", class_name="person", rank_range=(0, 8), direction="ascending")
+rank_grid(
+    chip_bank, "ViM", images=chip_images,
+    rank_range=(0, 8), direction="id",
+    class_name="person", group="weather", truth="ood",
+)
 plt.show()
 
 # %% [markdown]

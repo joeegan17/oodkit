@@ -324,3 +324,24 @@ Concrete next step when we come back to this: a short design doc + a small exper
 - `pool_image_scores` NaN policy for zero-chip images: drop vs. treat as most-OOD vs. user-provided fallback. MVP default: drop, with a warning if the count is non-trivial.
 
 These don’t block writing the plan, but each should be nailed down in its phase’s PR description.
+
+---
+
+## 8. Phase 7 review: what to promote from the COCO notebook
+
+The `coco_ood_showcase` notebook accumulated several analysis helpers while we were hunting down the right metrics. Phase 7 pulled the *generally useful* ones into `oodkit.evaluation` and deliberately kept the rest in the notebook. Record of decisions:
+
+**Promoted to `oodkit.evaluation` (shipped in Phase 7):**
+- `ScoreBank(groups=..., class_names=...)` + `by_group(...)`. Scaffolding that makes filters composable without coupling the bank to any particular dataset layout.
+- `compare.rank_samples(rank_range=...)`. `(start, end)` slice into the ranking for paging past the top-k.
+- `plots.score_distributions(kind="hist"|"kde", standardize=...)`. KDE mode (via `scipy.stats.gaussian_kde`) plus ID-relative z-scoring for visual comparability across detectors. Single-row “per detector” layout; applies to classification **and** detection banks.
+- `plots.rank_grid(rank_range=..., class_name=..., group=..., truth=...)` with richer titles (class name / group / ID-OOD / score). Images can be PIL, path strings, or any `__getitem__`-indexable loader — the COCO notebook's `ChipImageLoader` is a three-line adapter around `crop_chip`. This replaces the earlier notebook-local `display_chips`.
+
+**Intentionally kept in the notebook (deferred):**
+- Per-(class × OOD group) AUROC table + heatmap. The two-dimensional metric view is valuable but its current form hard-codes "ID = `coco_val`" and assumes OOD groups are a meaningful axis; generalizing this into `evaluate_by_group` / a `metric_by(dim1, dim2)` helper is its own design exercise and was out of scope for Phase 7.
+- 2D score-KDE grid (`score_kde_grid`). Same story — the 1D library version covers the aggregate per-detector view; the class×group grid stays as a notebook-local helper until we have a clean 2D API.
+
+**Deferred items tracked in `ROADMAP.md`:**
+- `ScoreBank.evaluate_by_group` and a generic 2D metric helper.
+- Library-side 2D score-distribution grid (class × group).
+- Richer `ChipImageLoader` utility (or equivalent) if more demos end up writing their own.

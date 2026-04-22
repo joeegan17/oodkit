@@ -162,3 +162,60 @@ def test_repr_non_empty():
     assert "ScoreBank" in r
     assert "MSP" in r
     assert "ood_labels" in r
+
+
+# ------------------------------------------------------------------
+# Groups and class_names
+# ------------------------------------------------------------------
+
+def test_groups_stored_and_sliced():
+    groups = np.array(["a", "b", "a", "c"], dtype=object)
+    bank = ScoreBank(groups=groups)
+    bank.add("MSP", np.array([0.1, 0.2, 0.3, 0.4]))
+    assert bank.has_groups
+    assert bank.groups is not None
+    np.testing.assert_array_equal(bank.unique_groups, ["a", "b", "c"])
+
+    a = bank.by_group("a")
+    assert a.n_samples == 2
+    np.testing.assert_allclose(a.scores_for("MSP"), [0.1, 0.3])
+    np.testing.assert_array_equal(a.groups, ["a", "a"])
+
+
+def test_by_group_requires_groups():
+    bank = ScoreBank()
+    bank.add("MSP", np.ones(3))
+    with pytest.raises(ValueError, match="groups"):
+        bank.by_group("foo")
+
+
+def test_class_names_roundtrip_and_by_class_name():
+    cls = np.array([0, 1, 0, 2])
+    bank = ScoreBank(
+        class_labels=cls,
+        class_names=["cat", "dog", "bird"],
+    )
+    bank.add("MSP", np.array([0.1, 0.2, 0.3, 0.4]))
+
+    assert bank.has_class_names
+    assert bank.class_names == ["cat", "dog", "bird"]
+
+    sub = bank.by_class("dog")
+    assert sub.n_samples == 1
+    np.testing.assert_allclose(sub.scores_for("MSP"), [0.2])
+    assert sub.class_names == ["cat", "dog", "bird"]
+
+    with pytest.raises(KeyError):
+        bank.by_class("fish")
+
+
+def test_subset_preserves_groups_and_class_names():
+    bank = ScoreBank(
+        class_labels=[0, 1, 0],
+        class_names=["a", "b"],
+        groups=np.array(["x", "y", "x"], dtype=object),
+    )
+    bank.add("MSP", np.array([0.1, 0.2, 0.3]))
+    sub = bank.subset([0, 2])
+    assert sub.class_names == ["a", "b"]
+    np.testing.assert_array_equal(sub.groups, ["x", "x"])

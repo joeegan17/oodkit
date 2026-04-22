@@ -10,6 +10,8 @@ for their own analysis, but no function in this module or ``plots.py`` requires
 calling it first.
 """
 
+from typing import Optional, Tuple
+
 import numpy as np
 
 from oodkit.types import ArrayLike
@@ -22,35 +24,52 @@ def rank_samples(
     detector: str,
     top_k: int = 20,
     direction: str = "ood",
+    rank_range: Optional[Tuple[int, int]] = None,
 ) -> np.ndarray:
-    """Return indices of the top-k samples ranked by OOD score.
+    """Return indices of samples ranked by OOD score.
 
     Args:
         bank: A ``ScoreBank`` with at least one detector.
         detector: Which detector's scores to rank by.
-        top_k: Number of sample indices to return.
+        top_k: Number of sample indices to return from the top of the ranking.
+            Ignored when ``rank_range`` is provided.
         direction: ``"ood"`` (default) returns highest-scoring = most OOD
             samples; ``"id"`` returns lowest-scoring = most ID-like samples.
+        rank_range: Optional ``(start, end)`` half-open slice into the sorted
+            order, e.g. ``(0, 8)`` for the top 8, ``(16, 24)`` for ranks 17–24.
+            When supplied this takes precedence over ``top_k``.
 
     Returns:
-        Integer index array of length ``min(top_k, n_samples)``, sorted so
-        the strongest examples come first.
+        Integer index array into the original sample order, with strongest
+        examples coming first within the returned slice.
 
     Raises:
-        ValueError: If ``direction`` is not ``"ood"`` or ``"id"``.
+        ValueError: If ``direction`` is not ``"ood"`` or ``"id"``, or if
+            ``rank_range`` is malformed.
         KeyError: If ``detector`` is not in the bank.
     """
     if direction not in ("ood", "id"):
         raise ValueError(f"direction must be 'ood' or 'id', got {direction!r}")
 
     scores = bank.scores_for(detector)
-    k = min(top_k, len(scores))
+    n = len(scores)
 
     if direction == "ood":
         idx = np.argsort(-scores, kind="stable")
     else:
         idx = np.argsort(scores, kind="stable")
 
+    if rank_range is not None:
+        start, end = rank_range
+        start = max(0, int(start))
+        end = min(int(end), n)
+        if start >= end:
+            raise ValueError(
+                f"empty rank_range={rank_range} for n_samples={n}"
+            )
+        return idx[start:end]
+
+    k = min(top_k, n)
     return idx[:k]
 
 
