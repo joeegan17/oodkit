@@ -5,6 +5,7 @@ description = "OOD detection toolkit"
 authors = [{name="Joseph Egan"}]
 dependencies = [
     "numpy",
+    "scipy",
     "matplotlib",
 ]
 
@@ -13,6 +14,7 @@ dev = [
     "pytest",
     "ipython",
     "jupyterlab",
+    "ipywidgets",
     "matplotlib",
 ]
 

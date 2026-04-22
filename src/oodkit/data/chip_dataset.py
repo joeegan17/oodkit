@@ -117,7 +117,10 @@ class ChipDataset(Dataset):
             ``"RGB"`` matches most vision backbones.
         loader: PIL loader. Defaults to ``torchvision.datasets.folder.default_loader``.
         class_names: Optional list mapping integer label to human-readable class
-            name; controls how ``object_ids`` are formatted.
+            name; controls how ``object_ids`` are formatted. When provided, the
+            list is also exposed as ``self.classes`` so
+            ``Embedder._infer_n_classes`` picks up the full label vocabulary
+            even after chip/image subsampling drops rare classes.
     """
 
     def __init__(
@@ -144,6 +147,8 @@ class ChipDataset(Dataset):
         self.class_names: Optional[List[str]] = (
             list(class_names) if class_names is not None else None
         )
+        if self.class_names is not None:
+            self.classes: List[str] = list(self.class_names)
 
         has_labels_vec = [ann.labels is not None for ann in annotations]
         if any(has_labels_vec) and not all(has_labels_vec):
