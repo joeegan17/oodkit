@@ -40,5 +40,8 @@ moving_imagenet_files.ipynb
 src/oodkit.egg-info
 
 # .py notebooks
-"notebooks/*.py"
+notebooks/*.py
+
+# Local PyPI readiness checklist
+PYPI_READINESS.md
 
