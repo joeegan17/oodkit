@@ -30,8 +30,15 @@ coverage.xml
 ROADMAP.md
 MVP_TODO.md
 
+# Personal planning / scratch notes
+supcon_loss_notes.md
+
 # Non-demo notebooks for development
 moving_imagenet_files.ipynb
 
 # Egg
 src/oodkit.egg-info
+
+# .py notebooks
+"notebooks/*.py"
+
