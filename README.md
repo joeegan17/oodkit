@@ -11,8 +11,7 @@ take you from raw images to scored samples in a few steps.
 ## Install
 
 ```bash
-pip install -e .              # core (NumPy, matplotlib, scipy)
-pip install -e ".[ml]"        # adds torch / transformers / sklearn for Embedder + datasets
+pip install -e .              # runtime dependencies for detectors, embeddings, plots, and examples
 pip install -e ".[dev]"       # adds test + notebook tooling
 ```
 
@@ -59,22 +58,22 @@ print(evaluate(bank))   # AUROC, FPR@95, AUPR, ...
 For a full end-to-end run (images → extraction → multiple detectors →
 comparison plots), see [`notebooks/`](notebooks/README.md):
 
-- [`imagenet_ood_showcase.py`](notebooks/imagenet_ood_showcase.py) —
+- [`imagenet_ood_showcase.ipynb`](notebooks/imagenet_ood_showcase.ipynb) —
   classification OOD on ImageNet vs ImageNet-O.
-- [`coco_ood_showcase.py`](notebooks/coco_ood_showcase.py) —
+- [`coco_ood_showcase.ipynb`](notebooks/coco_ood_showcase.ipynb) —
   object-detection OOD on COCO vs COCO-O (chips, image-level pooling,
   per-domain breakdowns, ranked chip galleries).
 
 ## Testing
 
 ```bash
-pip install -e ".[dev,ml]"
+pip install -e ".[dev]"
 pytest
 ```
 
 Tests mirror `src/oodkit/` under `tests/pkg/`. Tests that need torch skip
-cleanly if `[ml]` isn't installed. A Docker workflow is available for GPU
-development: `docker compose run --rm dev pytest`.
+cleanly if the runtime ML stack isn't installed. The recommended development
+workflow uses Docker: `docker compose run --rm dev pytest`.
 
 ## Design notes and deeper reading
 

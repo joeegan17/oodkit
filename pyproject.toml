@@ -1,13 +1,41 @@
 [project]
 name = "oodkit"
 version = "0.1.0"
-description = "OOD detection toolkit"
-authors = [{name="Joseph Egan"}]
-dependencies = [
-    "numpy",
-    "scipy",
-    "matplotlib",
+description = "Simple out-of-distribution detection tools for ML and computer vision."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [{name="Joseph Egan", email="joeegan17@gmail.com"}]
+keywords = ["ood", "out-of-distribution", "computer-vision", "machine-learning", "deep-learning"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
 ]
+dependencies = [
+    "matplotlib>=3.7",
+    "numpy>=1.23",
+    "pandas>=2.0",
+    "pillow>=9.0",
+    "scikit-learn>=1.2",
+    "scipy>=1.9",
+    "torch>=2.0",
+    "torchvision>=0.15",
+    "tqdm>=4.64",
+    "transformers>=4.36",
+]
+
+[project.urls]
+Homepage = "https://github.com/joeegan17/oodkit"
+Repository = "https://github.com/joeegan17/oodkit"
+Issues = "https://github.com/joeegan17/oodkit/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -15,19 +43,10 @@ dev = [
     "ipython",
     "jupyterlab",
     "ipywidgets",
-    "matplotlib",
-]
-
-ml = [
-    "scikit-learn",
-    "torch",
-    "torchvision",
-    "transformers",
-    "pandas",
 ]
 
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
