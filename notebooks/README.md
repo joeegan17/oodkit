@@ -1,21 +1,21 @@
 # Notebooks
 
-## ImageNet val vs ImageNet-O (`imagenet_ood_showcase.py`)
+## ImageNet val vs ImageNet-O (`imagenet_ood_showcase.ipynb`)
 
-Interactive script with `# %%` cells (open in VS Code / Cursor and use **Run Cell**, or paste into Jupyter).
+Public notebook with runnable cells. The ignored `.py` sibling is the agent-friendly editing source.
 
 Edit **paths and hyperparameters** at the top of the first code cell (`DATASETS_ROOT`, `IMAGENET_VAL_ROOT`, `IMAGENET_O_ROOT`, `LOC_SYNSET_MAPPING`, `HEAD_EPOCHS`, `BATCH_SIZE`, `NUM_WORKERS`, `PIN_MEMORY`, `PERSISTENT_WORKERS`, `TRAIN_FRACTION`).
 
 Uses the **full** ImageNet-O tree. Val is split **90% train / 10% ID test** by default (`TRAIN_FRACTION`).
 
 ```bash
-pip install -e ".[ml]"
-# open imagenet_ood_showcase.py and run cells top to bottom
+pip install -e ".[dev]"
+# open imagenet_ood_showcase.ipynb and run cells top to bottom
 ```
 
 Trains a **linear head** for 5 epochs (by default) on **DINOv2** (`dinov2-small`), fits detectors on the val train split, scores **held-out val + full ImageNet-O**, and prints `evaluate` metrics for all detectors. To try **DINOv3**, set `BACKBONE = "dinov3-small"` after Hugging Face access is set up (see roadmap).
 
-## COCO vs COCO-O object-detection domain (`coco_ood_showcase.py`)
+## COCO vs COCO-O object-detection domain (`coco_ood_showcase.ipynb`)
 
 Chip-level demo for the object-detection domain. Reads COCO train / val annotations and one or more COCO-O OOD domains (`cartoon`, `tattoo`, `weather`, ...), crops square chips around ground-truth boxes (no stretching), and evaluates **Energy**, **WDiscOOD**, and **ViM** at two granularities:
 
@@ -44,8 +44,8 @@ Expected directory layout:
 ```
 
 ```bash
-pip install -e ".[ml]"
-# open coco_ood_showcase.py and run cells top to bottom
+pip install -e ".[dev]"
+# open coco_ood_showcase.ipynb and run cells top to bottom
 ```
 
 No `pycocotools` dependency — `oodkit.contrib.coco` parses the JSON directly. See `OBJECT_DETECTION_PLAN.md` for design details and deferred research directions.
