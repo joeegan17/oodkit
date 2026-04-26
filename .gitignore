@@ -26,9 +26,14 @@ coverage.xml
 # Cursor
 .cursor/
 
+# Agents
+AGENTS.md
+
 # Roadmap
 ROADMAP.md
 MVP_TODO.md
+REPO_GUIDE.md
+OBJECT_DETECTION_PLAN.md
 
 # Personal planning / scratch notes
 supcon_loss_notes.md
@@ -38,6 +43,7 @@ moving_imagenet_files.ipynb
 
 # Egg
 src/oodkit.egg-info
+dist/
 
 # .py notebooks
 notebooks/*.py
