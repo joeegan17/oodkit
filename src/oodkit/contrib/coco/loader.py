@@ -88,6 +88,9 @@ def load_coco(
         file_name = str(img["file_name"])
         image_path = str(image_root_p / file_name)
         image_id_str = Path(file_name).stem
+        image_size = None
+        if "width" in img and "height" in img:
+            image_size = (float(img["width"]), float(img["height"]))
 
         boxes_xywh: List[List[float]] = []
         labels: List[int] = []
@@ -125,6 +128,7 @@ def load_coco(
                 labels=labels_arr,
                 group=group,
                 image_id=image_id_str,
+                image_size=image_size,
             )
         )
 

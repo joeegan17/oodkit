@@ -51,6 +51,7 @@ from oodkit.evaluation.combine import (
     ood_labels_from_counts,
 )
 from oodkit.evaluation.pooling import pool_image_scores
+from oodkit.evaluation.geometry_pooling import GeometryAwarePooler
 from oodkit.evaluation import plots
 
 __all__ = [
@@ -79,6 +80,7 @@ __all__ = [
     "ood_labels_from_blocks",
     "ood_labels_from_counts",
     # Object-detection pooling
+    "GeometryAwarePooler",
     "pool_image_scores",
     # Plots (namespace import)
     "plots",

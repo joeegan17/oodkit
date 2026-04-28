@@ -34,9 +34,9 @@ def _default_coco(tmp_path: Path) -> Path:
     _write_coco_json(
         ann_path,
         images=[
-            {"id": 1, "file_name": "00001.jpg"},
-            {"id": 2, "file_name": "00002.jpg"},
-            {"id": 3, "file_name": "empty.jpg"},
+            {"id": 1, "file_name": "00001.jpg", "width": 640, "height": 480},
+            {"id": 2, "file_name": "00002.jpg", "width": 800, "height": 600},
+            {"id": 3, "file_name": "empty.jpg", "width": 320, "height": 240},
         ],
         annotations=[
             {"id": 10, "image_id": 1, "category_id": 17, "bbox": [0, 0, 20, 30]},
@@ -72,8 +72,10 @@ def test_load_coco_basic(tmp_path: Path):
     np.testing.assert_array_equal(a1.boxes[1], [5, 5, 15, 15])
     assert a1.labels is not None
     np.testing.assert_array_equal(a1.labels, [0, 1])
+    assert a1.image_size == (640.0, 480.0)
     assert a2.boxes.shape == (1, 4)
     np.testing.assert_array_equal(a2.labels, [1])
+    assert a2.image_size == (800.0, 600.0)
 
 
 def test_load_coco_applies_group(tmp_path: Path):

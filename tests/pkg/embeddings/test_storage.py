@@ -19,6 +19,7 @@ def _write_shard(
     has_image_paths: bool = False,
     has_chip_to_image: bool = False,
     has_boxes: bool = False,
+    has_image_sizes: bool = False,
     has_object_ids: bool = False,
     has_groups: bool = False,
     has_image_ids: bool = False,
@@ -38,6 +39,9 @@ def _write_shard(
     if has_boxes:
         boxes = np.tile(np.array([[0, 0, 10, 10]], dtype=np.float64), (n_samples, 1))
         np.save(root / "boxes.npy", boxes)
+    if has_image_sizes:
+        sizes = np.tile(np.array([[100, 80]], dtype=np.float64), (n_samples, 1))
+        np.save(root / "image_sizes.npy", sizes)
     if has_object_ids:
         (root / "object_ids.json").write_text(
             json.dumps([f"obj_{i}" for i in range(n_samples)])
@@ -61,6 +65,7 @@ def _write_shard(
         "has_image_paths": has_image_paths,
         "has_chip_to_image": has_chip_to_image,
         "has_boxes": has_boxes,
+        "has_image_sizes": has_image_sizes,
         "has_object_ids": has_object_ids,
         "has_groups": has_groups,
         "has_image_ids": has_image_ids,
@@ -85,6 +90,7 @@ def test_load_embeddings_with_chip_metadata(tmp_path: Path):
         has_image_paths=True,
         has_chip_to_image=True,
         has_boxes=True,
+        has_image_sizes=True,
     )
     res = load_embeddings(tmp_path)
     assert res.embeddings.shape == (6, 2)
@@ -93,6 +99,7 @@ def test_load_embeddings_with_chip_metadata(tmp_path: Path):
         res.metadata["chip_to_image"], [0, 0, 1, 1, 2, 2]
     )
     assert res.metadata["boxes"].shape == (6, 4)
+    np.testing.assert_array_equal(res.metadata["image_sizes"][0], [100, 80])
 
 
 def test_load_embeddings_subsampling_preserves_chip_metadata(tmp_path: Path):
@@ -103,12 +110,14 @@ def test_load_embeddings_subsampling_preserves_chip_metadata(tmp_path: Path):
         has_image_paths=True,
         has_chip_to_image=True,
         has_boxes=True,
+        has_image_sizes=True,
     )
     res = load_embeddings(tmp_path, frac=0.5, seed=0)
     n = res.embeddings.shape[0]
     assert n == 5
     assert res.metadata["chip_to_image"].shape == (n,)
     assert res.metadata["boxes"].shape == (n, 4)
+    assert res.metadata["image_sizes"].shape == (n, 2)
     assert len(res.metadata["image_paths"]) == n
 
 

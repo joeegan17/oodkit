@@ -48,6 +48,9 @@ class ChipImageAnn:
             possible end-to-end.
         image_id: Optional stable id for the source image. Defaults to
             ``Path(image_path).stem``. Used to build :attr:`ChipDataset.object_ids`.
+        image_size: Optional ``(width, height)`` for the source image. When
+            provided for all annotations, it propagates as per-chip
+            ``image_sizes`` metadata for normalized geometry-aware pooling.
     """
 
     image_path: str
@@ -55,6 +58,7 @@ class ChipImageAnn:
     labels: Optional[np.ndarray] = None
     group: Optional[str] = None
     image_id: Optional[str] = None
+    image_size: Optional[Tuple[float, float]] = None
 
 
 class ChipDataset(Dataset):
@@ -78,6 +82,8 @@ class ChipDataset(Dataset):
         image_ids: ``(N_chips,)`` ``object`` array of parent-image ids (repeated
             per chip). Defaults to ``Path(image_path).stem`` unless the
             annotation supplied an explicit ``image_id``.
+        image_sizes: Optional ``(N_chips, 2)`` float64 array of parent image
+            ``(width, height)`` values, repeated per chip.
         object_ids: ``(N_chips,)`` ``object`` array of stable per-chip ids.
             Format (underscored, parts omitted when absent):
             ``{image_id}[_{class_name}][_{group}]_{order}``. ``order`` is the
@@ -166,10 +172,19 @@ class ChipDataset(Dataset):
             )
         self._has_groups = bool(has_group_vec[0])
 
+        has_size_vec = [ann.image_size is not None for ann in annotations]
+        if any(has_size_vec) and not all(has_size_vec):
+            raise ValueError(
+                "All annotations must either carry image_size or none may; "
+                "mixed image_size/no-image_size annotations are not supported."
+            )
+        self._has_image_sizes = bool(has_size_vec[0])
+
         image_paths: List[str] = []
         boxes_per_image: List[np.ndarray] = []
         labels_per_image: List[np.ndarray] = []
         chip_to_image_chunks: List[np.ndarray] = []
+        image_sizes_per_image: List[np.ndarray] = []
         per_image_groups: List[str] = []
         per_image_ids: List[str] = []
 
@@ -187,6 +202,19 @@ class ChipDataset(Dataset):
             if self._has_groups:
                 assert ann.group is not None
                 per_image_groups.append(str(ann.group))
+            if self._has_image_sizes:
+                assert ann.image_size is not None
+                size = np.asarray(ann.image_size, dtype=np.float64).reshape(-1)
+                if size.shape != (2,):
+                    raise ValueError(
+                        f"annotation {img_idx}: image_size must have shape (2,), "
+                        f"got {size.shape}"
+                    )
+                if np.any(size <= 0):
+                    raise ValueError(
+                        f"annotation {img_idx}: image_size values must be positive"
+                    )
+                image_sizes_per_image.append(size)
             if self._has_labels:
                 lab = np.asarray(ann.labels, dtype=np.int64).reshape(-1)
                 if lab.shape[0] != n:
@@ -222,6 +250,13 @@ class ChipDataset(Dataset):
         self.image_ids: np.ndarray = np.array(
             [per_image_ids[i] for i in chip_img_indices], dtype=object
         )
+        self.image_sizes: Optional[np.ndarray]
+        if self._has_image_sizes:
+            self.image_sizes = np.vstack(
+                [image_sizes_per_image[i] for i in chip_img_indices]
+            ).astype(np.float64, copy=False)
+        else:
+            self.image_sizes = None
         if self._has_groups:
             self.groups: Optional[np.ndarray] = np.array(
                 [per_image_groups[i] for i in chip_img_indices], dtype=object
@@ -244,6 +279,8 @@ class ChipDataset(Dataset):
             self.imgs = [(p, -1) for p in parent_paths]
 
         assert self.image_ids.shape == (n_chips,)
+        if self.image_sizes is not None:
+            assert self.image_sizes.shape == (n_chips, 2)
         assert self.object_ids.shape == (n_chips,)
         if self.groups is not None:
             assert self.groups.shape == (n_chips,)
@@ -322,6 +359,8 @@ class ChipDataset(Dataset):
             "object_id": str(self.object_ids[index]),
             "box_xyxy": self.boxes[index].tolist(),
         }
+        if self.image_sizes is not None:
+            out["image_size"] = self.image_sizes[index].tolist()
         if self._has_labels:
             assert self.labels is not None
             out["label"] = int(self.labels[index])
@@ -349,6 +388,7 @@ def make_chip_annotations(
     labels_key: str = "labels",
     group_key: str = "group",
     image_id_key: str = "image_id",
+    image_size_key: str = "image_size",
 ) -> List[ChipImageAnn]:
     """Small helper to build :class:`ChipImageAnn` list from dict-like records.
 
@@ -364,6 +404,7 @@ def make_chip_annotations(
         group_key: Key for the per-image group tag (optional per record).
         image_id_key: Key for an explicit per-image id (optional; defaults to
             ``Path(image_path).stem``).
+        image_size_key: Key for optional ``(width, height)`` image size.
 
     Returns:
         A list of :class:`ChipImageAnn` ready for :class:`ChipDataset`.
@@ -384,6 +425,7 @@ def make_chip_annotations(
             labels = np.asarray(labels, dtype=np.int64)
         group = _maybe_get(r, group_key)
         image_id = _maybe_get(r, image_id_key)
+        image_size = _maybe_get(r, image_size_key)
         out.append(
             ChipImageAnn(
                 image_path=str(path),
@@ -391,6 +433,7 @@ def make_chip_annotations(
                 labels=labels,
                 group=str(group) if group is not None else None,
                 image_id=str(image_id) if image_id is not None else None,
+                image_size=tuple(image_size) if image_size is not None else None,
             )
         )
     return out

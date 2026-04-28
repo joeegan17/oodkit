@@ -60,6 +60,7 @@ def ood_labels_from_blocks(lengths: Sequence[int], flags: Sequence[int]) -> np.n
 
 
 _CHIP_META_KEYS = ("chip_to_image", "boxes")
+_CHIP_ARRAY_META_KEYS = ("image_sizes",)
 _CHIP_LIST_META_KEYS = ("object_ids", "group", "image_ids")
 
 
@@ -72,6 +73,8 @@ def _merge_metadata(parts: Sequence[EmbeddingResult]) -> Dict:
       stream with unique image indices. Offset per block equals the running
       count of unique images in earlier blocks.
     - ``boxes`` arrays are vertically concatenated.
+    - Optional per-chip array metadata such as ``image_sizes`` is vertically
+      concatenated when present in every block.
     - OD list metadata (``object_ids``, ``group``, ``image_ids``) is enforced
       all-or-none across blocks so per-chip lookups always align with the
       concatenated embeddings.
@@ -108,6 +111,14 @@ def _merge_metadata(parts: Sequence[EmbeddingResult]) -> Dict:
                 f"{k!r} or omit it; got a mix."
             )
 
+    for k in _CHIP_ARRAY_META_KEYS:
+        presence = [k in r.metadata for r in parts]
+        if any(presence) and not all(presence):
+            raise ValueError(
+                f"All EmbeddingResult objects must either provide metadata "
+                f"{k!r} or omit it; got a mix."
+            )
+
     if all(k in parts[0].metadata for k in _CHIP_META_KEYS):
         chip_to_image_parts: List[np.ndarray] = []
         boxes_parts: List[np.ndarray] = []
@@ -130,6 +141,28 @@ def _merge_metadata(parts: Sequence[EmbeddingResult]) -> Dict:
                 offset += int(c2i.max()) + 1
         merged["chip_to_image"] = np.concatenate(chip_to_image_parts, axis=0)
         merged["boxes"] = np.concatenate(boxes_parts, axis=0)
+
+    for k in _CHIP_ARRAY_META_KEYS:
+        if k in parts[0].metadata:
+            arr_parts: List[np.ndarray] = []
+            for r in parts:
+                arr = np.asarray(r.metadata[k], dtype=np.float64)
+                if arr.ndim != 2:
+                    raise ValueError(
+                        f"metadata[{k!r}] must be a 2-D array, got {arr.shape}"
+                    )
+                if k == "image_sizes" and arr.shape[1] != 2:
+                    raise ValueError(
+                        f"metadata[{k!r}] must have shape (N, 2), got {arr.shape}"
+                    )
+                n = r.embeddings.shape[0]
+                if arr.shape[0] != n:
+                    raise ValueError(
+                        f"metadata[{k!r}] length {arr.shape[0]} does not match "
+                        f"embeddings length {n}"
+                    )
+                arr_parts.append(arr)
+            merged[k] = np.concatenate(arr_parts, axis=0)
 
     return merged
 

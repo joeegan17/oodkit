@@ -368,6 +368,11 @@ class Embedder:
                 with open(save_dir / "image_ids.json", "w") as f:
                     json.dump(chip_meta["image_ids"], f)
                 metadata["image_ids"] = chip_meta["image_ids"]
+            if "image_sizes" in chip_meta:
+                np.save(save_dir / "image_sizes.npy", chip_meta["image_sizes"])
+                metadata["image_sizes"] = np.load(
+                    str(save_dir / "image_sizes.npy"), mmap_mode="r"
+                )
 
         manifest = {
             "n_samples": n,
@@ -380,6 +385,7 @@ class Embedder:
             "has_object_ids": chip_meta is not None and "object_ids" in chip_meta,
             "has_groups": chip_meta is not None and "group" in chip_meta,
             "has_image_ids": chip_meta is not None and "image_ids" in chip_meta,
+            "has_image_sizes": chip_meta is not None and "image_sizes" in chip_meta,
         }
         with open(save_dir / "manifest.json", "w") as f:
             json.dump(manifest, f, indent=2)
@@ -528,6 +534,20 @@ class Embedder:
                     f"chip_to_image length {n}"
                 )
             out["image_ids"] = [str(x) for x in image_ids]
+        if getattr(ds, "image_sizes", None) is not None:
+            image_sizes = np.asarray(ds.image_sizes, dtype=np.float64).copy()
+            if image_sizes.ndim != 2 or image_sizes.shape[1] != 2:
+                raise ValueError(
+                    f"image_sizes must have shape (N, 2), got {image_sizes.shape}"
+                )
+            if image_sizes.shape[0] != n:
+                raise ValueError(
+                    f"image_sizes length {image_sizes.shape[0]} does not match "
+                    f"chip_to_image length {n}"
+                )
+            if np.any(image_sizes <= 0):
+                raise ValueError("image_sizes values must be positive")
+            out["image_sizes"] = image_sizes
         return out
 
     @staticmethod

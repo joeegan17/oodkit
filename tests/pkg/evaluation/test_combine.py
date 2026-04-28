@@ -90,6 +90,9 @@ def test_concatenate_embedding_results_chip_metadata_offsets():
             "boxes": np.array(
                 [[0, 0, 10, 10], [5, 5, 20, 20], [0, 0, 8, 8]], dtype=np.float64
             ),
+            "image_sizes": np.array(
+                [[100, 100], [100, 100], [80, 60]], dtype=np.float64
+            ),
         },
     )
     r_ood = EmbeddingResult(
@@ -97,6 +100,7 @@ def test_concatenate_embedding_results_chip_metadata_offsets():
         metadata={
             "chip_to_image": np.array([0, 1], dtype=np.int64),
             "boxes": np.array([[1, 1, 9, 9], [2, 2, 12, 12]], dtype=np.float64),
+            "image_sizes": np.array([[60, 60], [50, 50]], dtype=np.float64),
         },
     )
     comb, ood = concatenate_embedding_results([r_id, r_ood], [0, 1])
@@ -106,6 +110,10 @@ def test_concatenate_embedding_results_chip_metadata_offsets():
     assert comb.metadata["boxes"].shape == (5, 4)
     np.testing.assert_array_equal(
         comb.metadata["boxes"][-1], [2, 2, 12, 12]
+    )
+    np.testing.assert_array_equal(
+        comb.metadata["image_sizes"],
+        [[100, 100], [100, 100], [80, 60], [60, 60], [50, 50]],
     )
     np.testing.assert_array_equal(ood, [0, 0, 0, 1, 1])
 
@@ -120,6 +128,26 @@ def test_concatenate_embedding_results_chip_metadata_all_or_none():
     )
     r2 = EmbeddingResult(embeddings=np.ones((1, 2), dtype=np.float32))
     with pytest.raises(ValueError, match="chip_to_image"):
+        concatenate_embedding_results([r1, r2], [0, 1])
+
+
+def test_concatenate_embedding_results_image_sizes_all_or_none():
+    r1 = EmbeddingResult(
+        embeddings=np.zeros((1, 2), dtype=np.float32),
+        metadata={
+            "chip_to_image": np.array([0], dtype=np.int64),
+            "boxes": np.zeros((1, 4), dtype=np.float64),
+            "image_sizes": np.array([[100, 80]], dtype=np.float64),
+        },
+    )
+    r2 = EmbeddingResult(
+        embeddings=np.ones((1, 2), dtype=np.float32),
+        metadata={
+            "chip_to_image": np.array([0], dtype=np.int64),
+            "boxes": np.zeros((1, 4), dtype=np.float64),
+        },
+    )
+    with pytest.raises(ValueError, match="image_sizes"):
         concatenate_embedding_results([r1, r2], [0, 1])
 
 

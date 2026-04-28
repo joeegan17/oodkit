@@ -62,6 +62,8 @@ def load_embeddings(
         metadata["chip_to_image"] = _load_array(root / "chip_to_image.npy", indices)
     if manifest.get("has_boxes"):
         metadata["boxes"] = _load_array(root / "boxes.npy", indices)
+    if manifest.get("has_image_sizes"):
+        metadata["image_sizes"] = _load_array(root / "image_sizes.npy", indices)
     if manifest.get("has_object_ids"):
         _load_string_list(root / "object_ids.json", indices, metadata, "object_ids")
     if manifest.get("has_groups"):

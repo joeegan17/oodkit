@@ -45,11 +45,13 @@ def test_chip_dataset_labeled_flow(tmp_path: Path):
             image_path=str(img_a),
             boxes=np.array([[0, 0, 20, 20], [10, 10, 30, 30], [40, 40, 60, 60]]),
             labels=np.array([1, 2, 3]),
+            image_size=(64, 64),
         ),
         ChipImageAnn(
             image_path=str(img_b),
             boxes=np.array([[5, 5, 25, 25]]),
             labels=np.array([7]),
+            image_size=(80, 60),
         ),
     ]
     proc = _FakeProcessor()
@@ -61,6 +63,11 @@ def test_chip_dataset_labeled_flow(tmp_path: Path):
     assert ds.boxes.shape == (4, 4)
     assert ds.labels is not None
     np.testing.assert_array_equal(ds.labels, [1, 2, 3, 7])
+    assert ds.image_sizes is not None
+    np.testing.assert_array_equal(
+        ds.image_sizes,
+        [[64, 64], [64, 64], [64, 64], [80, 60]],
+    )
 
     assert len(ds.imgs) == 4
     assert ds.imgs[0] == (str(img_a), 1)
@@ -182,6 +189,23 @@ def test_chip_dataset_sample_descriptor(tmp_path: Path):
     assert len(d["box_xyxy"]) == 4
 
 
+def test_chip_dataset_rejects_mixed_image_size_presence(tmp_path: Path):
+    img_a = tmp_path / "a.png"
+    img_b = tmp_path / "b.png"
+    _save_image(img_a)
+    _save_image(img_b)
+    anns = [
+        ChipImageAnn(
+            image_path=str(img_a),
+            boxes=np.array([[0, 0, 10, 10]]),
+            image_size=(64, 64),
+        ),
+        ChipImageAnn(image_path=str(img_b), boxes=np.array([[0, 0, 10, 10]])),
+    ]
+    with pytest.raises(ValueError, match="image_size"):
+        ChipDataset(anns, _FakeProcessor())
+
+
 def test_make_chip_annotations_from_dicts(tmp_path: Path):
     img = tmp_path / "a.png"
     _save_image(img)
@@ -190,6 +214,7 @@ def test_make_chip_annotations_from_dicts(tmp_path: Path):
             "image_path": str(img),
             "boxes": [[0, 0, 10, 10], [5, 5, 15, 15]],
             "labels": [1, 2],
+            "image_size": [64, 64],
         }
     ]
     anns = make_chip_annotations(records)
@@ -197,6 +222,7 @@ def test_make_chip_annotations_from_dicts(tmp_path: Path):
     assert isinstance(anns[0], ChipImageAnn)
     assert anns[0].labels is not None
     np.testing.assert_array_equal(anns[0].labels, [1, 2])
+    assert anns[0].image_size == (64, 64)
 
 
 def test_make_chip_annotations_without_labels(tmp_path: Path):

@@ -49,3 +49,15 @@ pip install -e ".[dev]"
 ```
 
 No `pycocotools` dependency - `oodkit.contrib.coco` parses the JSON directly.
+
+## Geometry-Aware Pooling Research (`coco_geometry_pooling_vim.ipynb`)
+
+Focused COCO / COCO-O research notebook for comparing image-level pooling methods on top of **ViM** chip scores.
+
+It keeps the pipeline narrow: train/extract COCO chips, fit ViM, then compare:
+
+- `mean`
+- `topk_mean`
+- `GeometryAwarePooler`
+
+The notebook prints image-level metrics and visualizes ranked examples where simple pooling and geometry-aware pooling agree or disagree. It is intended for iterating on scene-level OOD scoring, not as a broad detector tutorial.

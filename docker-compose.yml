@@ -15,9 +15,12 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     volumes:
+      - .:/workspace
       - /mnt/c/dev/repos/oodkit:/workspace/repos/oodkit
       - /home/joeegan17/datasets:/datasets
     working_dir: /workspace/repos/oodkit
+    environment:
+      PYTHONPATH: /workspace/repos/oodkit/src
     gpus: all
     shm_size: "20gb"
     ports:

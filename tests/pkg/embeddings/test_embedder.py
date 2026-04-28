@@ -183,11 +183,13 @@ def test_extract_chip_metadata_returns_arrays_for_chip_dataset():
         boxes=np.array(
             [[0, 0, 10, 10], [5, 5, 20, 20], [0, 0, 8, 8]], dtype=np.float64
         ),
+        image_sizes=np.array([[100, 100], [100, 100], [80, 60]], dtype=np.float64),
     )
     out = Embedder._extract_chip_metadata(ds)
     assert out is not None
     np.testing.assert_array_equal(out["chip_to_image"], [0, 0, 1])
     assert out["boxes"].shape == (3, 4)
+    np.testing.assert_array_equal(out["image_sizes"], [[100, 100], [100, 100], [80, 60]])
     assert out["chip_to_image"].dtype == np.int64
     assert out["boxes"].dtype == np.float64
 
@@ -212,6 +214,16 @@ def test_extract_chip_metadata_rejects_bad_boxes_shape():
         boxes=np.zeros((1, 3), dtype=np.float64),
     )
     with pytest.raises(ValueError, match="boxes"):
+        Embedder._extract_chip_metadata(ds)
+
+
+def test_extract_chip_metadata_rejects_bad_image_sizes_shape():
+    ds = SimpleNamespace(
+        chip_to_image=np.array([0], dtype=np.int64),
+        boxes=np.zeros((1, 4), dtype=np.float64),
+        image_sizes=np.zeros((1, 3), dtype=np.float64),
+    )
+    with pytest.raises(ValueError, match="image_sizes"):
         Embedder._extract_chip_metadata(ds)
 
 
