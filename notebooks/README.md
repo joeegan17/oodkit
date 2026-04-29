@@ -61,3 +61,19 @@ It keeps the pipeline narrow: train/extract COCO chips, fit ViM, then compare:
 - `GeometryAwarePooler`
 
 The notebook prints image-level metrics and visualizes ranked examples where simple pooling and geometry-aware pooling agree or disagree. It is intended for iterating on scene-level OOD scoring, not as a broad detector tutorial.
+
+## Global + Chip OOD Fusion (`coco_global_chip_fusion.ipynb`)
+
+Focused COCO / COCO-O research notebook for combining whole-image embedding OOD scores with chip-level **ViM** scores.
+
+It trains the chip head once, extracts embeddings for both chips and full parent images, compares non-logit global image detectors (`KNN`, `Mahalanobis`, `WDiscOOD`), then evaluates:
+
+- mean chip pooling
+- top-k chip pooling
+- global image embedding OOD
+- global + mean chip
+- global + top-k chip
+- global + chip + geometry
+- geometry only
+
+This is the preferred notebook for testing whether global image context helps COCO-O before moving to datasets with stronger scene-layout shift.

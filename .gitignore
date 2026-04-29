@@ -51,3 +51,4 @@ notebooks/*.py
 # Local PyPI readiness checklist
 PYPI_READINESS.md
 
+.Trash-0/
