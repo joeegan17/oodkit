@@ -1,6 +1,6 @@
 [project]
 name = "oodkit"
-version = "0.1.0"
+version = "0.1.1"
 description = "Simple out-of-distribution detection tools for ML and computer vision."
 readme = "README.md"
 requires-python = ">=3.10"
