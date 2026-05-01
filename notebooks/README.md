@@ -77,3 +77,18 @@ It trains the chip head once, extracts embeddings for both chips and full parent
 - geometry only
 
 This is the preferred notebook for testing whether global image context helps COCO-O before moving to datasets with stronger scene-layout shift.
+
+## Detection Failure Prediction (`coco_detection_failure_prediction.ipynb`)
+
+Focused COCO / COCO-O notebook for the image-class failure-prediction pipeline.
+
+It trains/reference-fits on a COCO train ID subset, then evaluates a pretrained torchvision detector on COCO val plus the COCO-O `cartoon` domain. Detections are evaluated against GT into canonical `image_id x class_id` rows, DINOv2 + ViM scores are computed at both full-image and detection-chip scale, and grouped logistic baselines compare:
+
+- failure-prior baseline
+- class identity only
+- confidence only
+- OOD only
+- confidence + OOD
+- confidence + OOD + class
+
+It also includes per-domain metrics, high-confidence failures, same-confidence OOD quantile comparisons, and a qualitative gallery. This is the first milestone for the claim that inference-time multi-scale OOD signals can surface the classes within shifted images where an object detector is likely to fail.

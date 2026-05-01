@@ -44,6 +44,9 @@ dev = [
     "jupyterlab",
     "ipywidgets",
 ]
+od = [
+    "fiftyone>=0.24",
+]
 
 [build-system]
 requires = ["setuptools>=77", "wheel"]
