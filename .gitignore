@@ -52,3 +52,4 @@ notebooks/*.py
 PYPI_READINESS.md
 
 .Trash-0/
+notebooks/outputs/
