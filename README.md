@@ -62,9 +62,9 @@ print(evaluate(bank))  # AUROC, FPR@95, AUPR, ...
 For full end-to-end runs (images to extraction to multiple detectors to
 comparison plots), see the example notebooks on GitHub:
 
-- [ImageNet OOD showcase](https://github.com/joeegan17/oodkit/blob/main/notebooks/imagenet_ood_showcase.ipynb) -
+- [ImageNet OOD showcase](https://github.com/joeegan17/oodkit/blob/main/notebooks/detector_demos/magenet_ood_showcase.ipynb) -
   classification OOD on ImageNet vs ImageNet-O.
-- [COCO OOD showcase](https://github.com/joeegan17/oodkit/blob/main/notebooks/coco_ood_showcase.ipynb) -
+- [COCO OOD showcase](https://github.com/joeegan17/oodkit/blob/main/notebooks/detector_demos/coco_ood_showcase.ipynb) -
   object-detection OOD on COCO vs COCO-O (chips, image-level pooling,
   per-domain breakdowns, ranked chip galleries).
 - [Notebook guide](https://github.com/joeegan17/oodkit/blob/main/notebooks/README.md) -

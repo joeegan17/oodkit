@@ -14,6 +14,7 @@ from oodkit.detectors.pca_fusion import PCAFusion
 from oodkit.detectors.vim import ViM
 from oodkit.detectors.wdiscood import WDiscOOD
 from oodkit.data.features import Features
+from oodkit.auditing import correct_prediction_mask, fit_detector_on_mask, subset_features
 
 __all__ = [
     "BaseDetector",
@@ -26,4 +27,7 @@ __all__ = [
     "PCAFusion",
     "ViM",
     "WDiscOOD",
+    "correct_prediction_mask",
+    "fit_detector_on_mask",
+    "subset_features",
 ]

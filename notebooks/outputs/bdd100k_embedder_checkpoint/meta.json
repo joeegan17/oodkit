@@ -1,0 +1,21 @@
+{
+  "backbone": "dinov2-small",
+  "embed_dim": 384,
+  "n_classes": 10,
+  "class_names": [
+    "bike",
+    "bus",
+    "car",
+    "motor",
+    "person",
+    "rider",
+    "traffic light",
+    "traffic sign",
+    "train",
+    "truck"
+  ],
+  "mode": "full",
+  "epochs": 8,
+  "lr": 0.0005,
+  "backbone_lr_ratio": 0.05
+}
